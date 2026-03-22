@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FieldOps">
@@ -232,8 +232,8 @@
   <!-- ═══════════════════════════════════════════════════════
        FINISH & LOG BOTTOM SHEET
   ═══════════════════════════════════════════════════════ -->
-  <div id="sheet-backdrop" class="sheet-backdrop hidden" role="dialog" aria-modal="true" aria-label="Finish and log job"></div>
-  <div id="bottom-sheet" class="bottom-sheet hidden">
+  <div id="sheet-backdrop" class="sheet-backdrop hidden" aria-hidden="true"></div>
+  <div id="bottom-sheet" class="bottom-sheet hidden" role="dialog" aria-modal="true" aria-label="Finish and log job" tabindex="-1">
     <div class="sheet-handle" role="presentation"></div>
     <div id="sheet-body" class="sheet-body"></div>
   </div>
@@ -1154,6 +1154,7 @@ const S = {
   gpsPos:       null,
   gpsWatch:     null,
   timerHandle:  null,
+  tokenCheckIntervalId: null,
   isLoading:    false,
 };
 
@@ -1389,6 +1390,7 @@ async function ensureValidToken() {
 function signOut() {
   stopTimer();
   stopGPS();
+  if (S.tokenCheckIntervalId) { clearInterval(S.tokenCheckIntervalId); S.tokenCheckIntervalId = null; }
   clearAuth();
   S.auth    = null;
   S.tickets = [];
@@ -1434,7 +1436,7 @@ async function loadTickets() {
   try {
     const filter = S.config?.ticketFilter || 'mine';
     let url = '/Tickets?open_only=true&count=50';
-    if (filter === 'mine' && S.auth?.agent_id) url += `&agentid=${S.auth.agent_id}`;
+    if ((filter === 'mine' || filter === 'team') && S.auth?.agent_id) url += `&agentid=${S.auth.agent_id}`;
 
     const data    = await apiRequest(url);
     S.tickets     = Array.isArray(data) ? data : (data?.tickets || []);
@@ -1868,14 +1870,14 @@ function buildDetailHTML(ticket, client, site) {
       <div class="info-row">
         <span class="info-label">Client</span>
         <span class="info-value">
-          ${client.phone ? `<a href="tel:${client.phone}" class="info-link">${esc(client.name)}</a>` : esc(client.name || '')}
+          ${client.phone ? `<a href="tel:${encodeURIComponent(String(client.phone))}" class="info-link">${esc(client.name)}</a>` : esc(client.name || '')}
         </span>
       </div>` : ''}
       ${site ? `
       <div class="info-row">
         <span class="info-label">Site</span>
         <span class="info-value">
-          ${site.phone ? `<a href="tel:${site.phone}" class="info-link">${esc(site.name)}</a>` : esc(site.name || '')}
+          ${site.phone ? `<a href="tel:${encodeURIComponent(String(site.phone))}" class="info-link">${esc(site.name)}</a>` : esc(site.name || '')}
         </span>
       </div>
       ${addrStr ? `
@@ -1888,12 +1890,20 @@ function buildDetailHTML(ticket, client, site) {
       ${client?.website ? `
       <div class="info-row">
         <span class="info-label">Web</span>
-        <span class="info-value"><a href="${esc(client.website)}" target="_blank" rel="noopener" class="info-link">${esc(client.website)}</a></span>
+        <span class="info-value">${
+          /^https?:/i.test(client.website)
+            ? `<a href="${esc(client.website)}" target="_blank" rel="noopener" class="info-link">${esc(client.website)}</a>`
+            : esc(client.website)
+        }</span>
       </div>` : ''}
       ${site?.website && site.website !== client?.website ? `
       <div class="info-row">
         <span class="info-label">Site web</span>
-        <span class="info-value"><a href="${esc(site.website)}" target="_blank" rel="noopener" class="info-link">${esc(site.website)}</a></span>
+        <span class="info-value">${
+          /^https?:/i.test(site.website)
+            ? `<a href="${esc(site.website)}" target="_blank" rel="noopener" class="info-link">${esc(site.website)}</a>`
+            : esc(site.website)
+        }</span>
       </div>` : ''}
       <div class="info-row">
         <span class="info-label"></span>
@@ -2541,8 +2551,9 @@ async function initApp() {
     if (phase === 'traveling' || phase === 'onsite') startTimer();
   }
 
-  // Auto-refresh token validity check
-  setInterval(() => ensureValidToken(), TOKEN_CHECK_INTERVAL_MS);
+  // Auto-refresh token validity check (clear any existing interval first)
+  if (S.tokenCheckIntervalId) clearInterval(S.tokenCheckIntervalId);
+  S.tokenCheckIntervalId = setInterval(() => ensureValidToken(), TOKEN_CHECK_INTERVAL_MS);
 
   // Load tickets
   await loadTickets();
