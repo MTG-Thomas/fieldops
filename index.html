@@ -1,0 +1,2558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FieldOps">
+  <meta name="description" content="HaloPSA Field Tech PWA — GPS check-in, time tracking, and ticket management for MSP field technicians.">
+  <meta name="theme-color" content="#0f1923">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <title>FieldOps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ═══════════════════════════════════════════════════════
+       CONFIG SCREEN — first-run setup
+  ═══════════════════════════════════════════════════════ -->
+  <div id="screen-config" class="screen hidden">
+    <div class="auth-page">
+      <div class="auth-logo">
+        <span class="logo-text">FieldOps</span>
+        <span class="logo-sub">HaloPSA Field Tech</span>
+      </div>
+      <div class="card">
+        <h2 class="card-title">Configuration</h2>
+        <p class="card-subtitle">Connect to your HaloPSA instance</p>
+        <div class="form-group">
+          <label class="lbl" for="cfg-tenant">Tenant (subdomain)</label>
+          <input type="text" id="cfg-tenant" class="inp" placeholder="midtown" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-auth">Auth Server URL</label>
+          <input type="url" id="cfg-auth" class="inp" placeholder="https://midtown.halopsa.com/auth" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-api">Resource Server URL</label>
+          <input type="url" id="cfg-api" class="inp" placeholder="https://midtown.halopsa.com/api" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-client-id">Client ID</label>
+          <input type="text" id="cfg-client-id" class="inp" placeholder="your-client-id" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-redirect">Redirect URI</label>
+          <input type="url" id="cfg-redirect" class="inp" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-filter">Default Ticket Filter</label>
+          <select id="cfg-filter" class="inp sel">
+            <option value="mine">Assigned to me</option>
+            <option value="team">My team</option>
+            <option value="all">All open</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-action-type">Action Type ID</label>
+          <input type="number" id="cfg-action-type" class="inp" value="2" min="1">
+        </div>
+        <button id="btn-save-config" class="btn btn-primary btn-full mt-8">Save &amp; Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       AUTH SCREEN — sign in
+  ═══════════════════════════════════════════════════════ -->
+  <div id="screen-auth" class="screen hidden">
+    <div class="auth-page">
+      <div class="auth-logo">
+        <span class="logo-text">FieldOps</span>
+        <span class="logo-sub">HaloPSA Field Tech</span>
+      </div>
+      <div class="card">
+        <h2 class="card-title">Sign In</h2>
+        <p id="auth-subtitle" class="card-subtitle">Connect to your workspace</p>
+        <button id="btn-sign-in" class="btn btn-primary btn-full">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Sign in with HaloPSA
+        </button>
+        <button id="btn-reconfigure" class="btn btn-ghost btn-full mt-8">Change Configuration</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN APP SCREEN
+  ═══════════════════════════════════════════════════════ -->
+  <div id="screen-app" class="screen hidden">
+
+    <!-- Sticky Header -->
+    <header class="app-header">
+      <span class="header-brand">FieldOps</span>
+      <div id="conn-badge" class="badge badge-gray">
+        <span class="badge-dot"></span>
+        <span id="badge-label">Not connected</span>
+      </div>
+    </header>
+
+    <!-- Active Job Banner (shown when job is in progress) -->
+    <div id="job-banner" class="job-banner hidden">
+      <div class="banner-left">
+        <span class="pulse-ring"></span>
+        <div class="banner-meta">
+          <span id="banner-id" class="banner-id"></span>
+          <span id="banner-summary" class="banner-summary"></span>
+        </div>
+      </div>
+      <div class="banner-right">
+        <span id="banner-timer" class="banner-timer">00:00:00</span>
+        <button id="banner-btn" class="btn btn-sm btn-accent"></button>
+      </div>
+    </div>
+
+    <!-- Tab Content -->
+    <main id="main-content" class="main-content">
+
+      <!-- Dashboard Tab -->
+      <div id="tab-dashboard" class="tab-pane">
+        <div class="pane-inner">
+          <div class="pane-header">
+            <h2 class="pane-title">My Tickets</h2>
+            <button id="btn-refresh" class="btn btn-icon" title="Refresh tickets" aria-label="Refresh tickets">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+          </div>
+          <div id="ticket-list"></div>
+        </div>
+      </div>
+
+      <!-- Activity Tab -->
+      <div id="tab-activity" class="tab-pane hidden">
+        <div class="pane-inner">
+          <h2 class="pane-title">Today's Activity</h2>
+          <div id="activity-totals" class="activity-totals"></div>
+          <div id="today-log" class="activity-list"></div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="tab-settings" class="tab-pane hidden">
+        <div class="pane-inner">
+          <h2 class="pane-title">Settings</h2>
+
+          <div class="card mb-16">
+            <p class="card-label">Connection</p>
+            <div class="form-group">
+              <label class="lbl" for="set-tenant">Tenant</label>
+              <input type="text" id="set-tenant" class="inp" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="set-auth">Auth Server URL</label>
+              <input type="url" id="set-auth" class="inp" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="set-api">Resource Server URL</label>
+              <input type="url" id="set-api" class="inp" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="set-client-id">Client ID</label>
+              <input type="text" id="set-client-id" class="inp" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="set-redirect">Redirect URI</label>
+              <input type="url" id="set-redirect" class="inp" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+
+          <div class="card mb-16">
+            <p class="card-label">Preferences</p>
+            <div class="form-group">
+              <label class="lbl" for="set-filter">Default Ticket Filter</label>
+              <select id="set-filter" class="inp sel">
+                <option value="mine">Assigned to me</option>
+                <option value="team">My team</option>
+                <option value="all">All open</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="set-action-type">Action Type ID</label>
+              <input type="number" id="set-action-type" class="inp" min="1">
+            </div>
+          </div>
+
+          <button id="btn-save-settings" class="btn btn-primary btn-full mb-8">Save Settings</button>
+          <button id="btn-reload" class="btn btn-secondary btn-full mb-8">Reload Tickets</button>
+          <button id="btn-sign-out" class="btn btn-danger btn-full mb-16">Sign Out</button>
+          <p class="version-info">FieldOps v<span id="app-ver"></span></p>
+        </div>
+      </div>
+
+    </main><!-- #main-content -->
+
+    <!-- Ticket Detail View (full-screen overlay) -->
+    <div id="ticket-detail" class="detail-view hidden">
+      <header class="detail-header">
+        <button id="btn-back" class="btn btn-icon" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="detail-header-meta">
+          <span id="detail-tid" class="detail-tid"></span>
+          <span id="detail-summary" class="detail-summary"></span>
+        </div>
+      </header>
+      <div id="detail-body" class="detail-body"></div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
+      <button class="nav-btn active" data-tab="dashboard" aria-label="Dashboard">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-btn" data-tab="activity" aria-label="Activity">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Activity</span>
+      </button>
+      <button class="nav-btn" data-tab="settings" aria-label="Settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><circle cx="12" cy="12" r="7"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+  </div><!-- #screen-app -->
+
+  <!-- ═══════════════════════════════════════════════════════
+       FINISH & LOG BOTTOM SHEET
+  ═══════════════════════════════════════════════════════ -->
+  <div id="sheet-backdrop" class="sheet-backdrop hidden" role="dialog" aria-modal="true" aria-label="Finish and log job"></div>
+  <div id="bottom-sheet" class="bottom-sheet hidden">
+    <div class="sheet-handle" role="presentation"></div>
+    <div id="sheet-body" class="sheet-body"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-zone" class="toast-zone" aria-live="polite" aria-atomic="true"></div>
+
+</div><!-- #app -->
+
+<!-- Hidden file input for photo capture -->
+<input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" aria-hidden="true">
+
+<!-- ═══════════════════════════════════════════════════════
+     STYLES
+═══════════════════════════════════════════════════════ -->
+<style>
+/* ── Reset & base ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:      #0f1923;
+  --surface: #162030;
+  --border:  #243347;
+  --accent:  #00d4ff;
+  --success: #4ade80;
+  --warning: #ffa502;
+  --danger:  #ff4757;
+  --muted:   #6b8299;
+  --text:    #e8eef4;
+  --font-heading: 'Syne', sans-serif;
+  --font-mono:    'DM Mono', monospace;
+  --font-body:    'Inter', sans-serif;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+html { height: 100%; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { height: 100%; position: relative; }
+
+/* ── Screens ──────────────────────────────────────────── */
+.screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 10;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Utilities ─────────────────────────────────────────── */
+.hidden { display: none !important; }
+.mt-8  { margin-top: 8px; }
+.mb-8  { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+
+/* ── Auth / Config page ───────────────────────────────── */
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100%;
+  padding: 48px 20px calc(48px + var(--safe-b));
+  gap: 24px;
+}
+
+.auth-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.logo-text {
+  font-family: var(--font-heading);
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -1px;
+}
+
+.logo-sub {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+/* ── Card ──────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.card-title {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.card-subtitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.card-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+/* ── Forms ─────────────────────────────────────────────── */
+.form-group { margin-bottom: 14px; }
+.form-group:last-child { margin-bottom: 0; }
+
+.lbl {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.inp {
+  width: 100%;
+  min-height: 44px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+}
+
+.inp:focus { border-color: var(--accent); }
+.inp::placeholder { color: var(--muted); }
+
+.sel { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b8299' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+
+textarea.inp { min-height: 80px; resize: vertical; line-height: 1.5; }
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+  -webkit-appearance: none;
+}
+
+.btn:active { opacity: 0.75; transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary  { background: var(--accent); color: #0f1923; }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-accent   { background: var(--accent); color: #0f1923; }
+.btn-danger   { background: var(--danger); color: #fff; }
+.btn-ghost    { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-warning  { background: var(--warning); color: #0f1923; }
+.btn-success  { background: var(--success); color: #0f1923; }
+
+.btn-full { width: 100%; }
+.btn-sm   { min-height: 36px; padding: 6px 14px; font-size: 13px; border-radius: 8px; }
+
+.btn-icon {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+}
+.btn-icon:hover { color: var(--text); background: var(--border); }
+
+/* ── App Header ────────────────────────────────────────── */
+.app-header {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+.header-brand {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+/* ── Connection Badge ──────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+}
+
+.badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.badge-green .badge-dot  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.badge-gray  .badge-dot  { background: var(--muted); }
+.badge-red   .badge-dot  { background: var(--danger); }
+
+/* ── Active Job Banner ─────────────────────────────────── */
+.job-banner {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pulse-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.6); }
+  70%  { box-shadow: 0 0 0 8px rgba(0, 212, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0); }
+}
+
+.banner-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.banner-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.banner-summary {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.banner-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.banner-timer {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+/* ── Main content + tabs ───────────────────────────────── */
+#screen-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+}
+
+.tab-pane { display: block; }
+
+.pane-inner {
+  padding: 16px 16px calc(80px + var(--safe-b));
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.pane-title {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* ── Ticket Cards ──────────────────────────────────────── */
+.ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ticket-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 14px 14px 18px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.ticket-card:active { opacity: 0.8; }
+.ticket-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 12px 0 0 12px;
+  background: var(--priority-color, var(--muted));
+}
+
+.ticket-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.ticket-summary {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.ticket-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ticket-priority {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 500;
+  background: var(--border);
+}
+
+/* ── Skeleton loaders ──────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--border) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 14px 14px 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-line {
+  height: 12px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.skeleton-line.short { width: 40%; }
+.skeleton-line.medium { width: 70%; }
+.skeleton-line.long { width: 90%; }
+
+/* ── Bottom Navigation ─────────────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 0 calc(8px + var(--safe-b));
+  z-index: 100;
+}
+
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s;
+  min-height: 44px;
+}
+
+.nav-btn.active,
+.nav-btn:hover { color: var(--accent); }
+
+/* ── Ticket Detail View ────────────────────────────────── */
+.detail-view {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.detail-header-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.detail-tid {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.detail-summary {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Info Card sections inside ticket detail ───────────── */
+.info-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.info-card-header {
+  padding: 10px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.info-card-body { padding: 14px; }
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.info-row:last-child { border-bottom: none; padding-bottom: 0; }
+.info-row:first-child { padding-top: 0; }
+
+.info-label {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 70px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.info-value { flex: 1; word-break: break-word; }
+
+.info-link {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.info-link:hover { text-decoration: underline; }
+
+.wrong-site-link {
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--muted);
+}
+
+/* ── GPS Card ──────────────────────────────────────────── */
+.gps-status {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 0 12px;
+}
+
+.job-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.job-actions .btn { flex: 1; min-width: 120px; }
+
+/* ── Activity log ──────────────────────────────────────── */
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.activity-entry {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  align-items: flex-start;
+}
+
+.activity-entry:last-child { border-bottom: none; }
+
+.act-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.act-dot-travel  { background: var(--warning); }
+.act-dot-onsite  { background: var(--success); }
+.act-dot-photo   { background: var(--accent); }
+.act-dot-note    { background: var(--muted); }
+
+.act-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 56px;
+}
+
+.act-text { flex: 1; line-height: 1.4; }
+
+/* ── Activity totals ───────────────────────────────────── */
+.activity-totals {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.total-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.total-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.total-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Photo grid ────────────────────────────────────────── */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.photo-thumb {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+}
+
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 71, 87, 0.9);
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-add {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  transition: border-color 0.15s, color 0.15s;
+  min-height: 80px;
+}
+
+.photo-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Manual time entry ─────────────────────────────────── */
+.time-row {
+  display: flex;
+  gap: 8px;
+}
+
+.time-row .form-group { flex: 1; }
+
+/* ── Bottom Sheet ──────────────────────────────────────── */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 490;
+}
+
+.bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0;
+  z-index: 500;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 88vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bottom-sheet.open { transform: translateY(0); }
+
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 12px auto 4px;
+  flex-shrink: 0;
+}
+
+.sheet-body {
+  padding: 8px 20px calc(28px + var(--safe-b));
+}
+
+.sheet-title {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.summary-row:last-of-type { border-bottom: none; }
+
+.summary-key { color: var(--muted); }
+
+.summary-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ── Toast notifications ───────────────────────────────── */
+.toast-zone {
+  position: fixed;
+  bottom: calc(80px + var(--safe-b));
+  left: 16px;
+  right: 16px;
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: toast-in 0.25s ease;
+  pointer-events: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-success { background: var(--success); color: #0f1923; }
+.toast-error   { background: var(--danger);  color: #fff; }
+.toast-warning { background: var(--warning); color: #0f1923; }
+.toast-info    { background: var(--accent);  color: #0f1923; }
+
+/* ── Version info ──────────────────────────────────────── */
+.version-info {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Loading spinner ───────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Empty state ───────────────────────────────────────── */
+.empty-state {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-state-text { font-size: 15px; }
+
+/* ── Responsive tweaks for larger screens ──────────────── */
+@media (min-width: 480px) {
+  .auth-page { padding-top: 64px; }
+  .pane-inner { padding-left: 24px; padding-right: 24px; }
+  .detail-body { padding-left: 24px; padding-right: 24px; }
+}
+</style>
+
+<!-- ═══════════════════════════════════════════════════════
+     APPLICATION LOGIC
+═══════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────
+const APP_VERSION = '1.0.0';
+
+const TOKEN_REFRESH_BUFFER_MS  = 5 * 60 * 1000;  // refresh token 5 min before expiry
+const TOKEN_CHECK_INTERVAL_MS  = 60 * 1000;       // check token validity every 60 seconds
+
+const SK = {
+  CONFIG:     'fo_config',
+  AUTH:       'fo_auth',
+  PKCE_V:     'fo_pkce_v',
+  ACTIVE_JOB: 'fo_job',
+  TODAY_LOG:  'fo_today',
+  TODAY_DATE: 'fo_date',
+};
+
+// ─────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────
+const S = {
+  config:       null,   // { tenant, authServer, resourceServer, clientId, redirectUri, ticketFilter, actionTypeId }
+  auth:         null,   // { access_token, refresh_token, expires_at, agent_id, agent_name }
+  tickets:      [],
+  clientCache:  {},
+  siteCache:    {},
+  activeJob:    null,   // { ticketId, ticketSummary, travelStart, travelEnd, onsiteStart, onsiteEnd, log[] }
+  todayLog:     [],
+  photos:       [],     // [{ dataUrl, name, ts }]  — in-memory only
+  currentTab:   'dashboard',
+  currentTicket: null,
+  gpsPos:       null,
+  gpsWatch:     null,
+  timerHandle:  null,
+  isLoading:    false,
+};
+
+// ─────────────────────────────────────────────────────────
+// STORAGE HELPERS
+// ─────────────────────────────────────────────────────────
+function loadConfig() {
+  try { const r = localStorage.getItem(SK.CONFIG); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+
+function saveConfig(cfg) {
+  localStorage.setItem(SK.CONFIG, JSON.stringify(cfg));
+}
+
+function loadAuth() {
+  try { const r = sessionStorage.getItem(SK.AUTH); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+
+function saveAuth(data) {
+  sessionStorage.setItem(SK.AUTH, JSON.stringify(data));
+}
+
+function clearAuth() {
+  sessionStorage.removeItem(SK.AUTH);
+  sessionStorage.removeItem(SK.PKCE_V);
+}
+
+function loadActiveJob() {
+  try { const r = localStorage.getItem(SK.ACTIVE_JOB); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+
+function saveActiveJob() {
+  if (S.activeJob) localStorage.setItem(SK.ACTIVE_JOB, JSON.stringify(S.activeJob));
+  else localStorage.removeItem(SK.ACTIVE_JOB);
+}
+
+function loadTodayLog() {
+  try {
+    const storedDate = localStorage.getItem(SK.TODAY_DATE);
+    const today = new Date().toDateString();
+    if (storedDate !== today) {
+      localStorage.setItem(SK.TODAY_DATE, today);
+      localStorage.removeItem(SK.TODAY_LOG);
+      return [];
+    }
+    const r = localStorage.getItem(SK.TODAY_LOG);
+    return r ? JSON.parse(r) : [];
+  } catch { return []; }
+}
+
+function saveTodayLog() {
+  localStorage.setItem(SK.TODAY_LOG, JSON.stringify(S.todayLog));
+  localStorage.setItem(SK.TODAY_DATE, new Date().toDateString());
+}
+
+// ─────────────────────────────────────────────────────────
+// PKCE UTILITIES
+// ─────────────────────────────────────────────────────────
+function b64urlEncode(buf) {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let str = '';
+  for (const b of bytes) str += String.fromCharCode(b);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function genCodeVerifier() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return b64urlEncode(arr);
+}
+
+async function genCodeChallenge(verifier) {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return b64urlEncode(digest);
+}
+
+// ─────────────────────────────────────────────────────────
+// AUTH FUNCTIONS
+// ─────────────────────────────────────────────────────────
+async function startAuth() {
+  const cfg = S.config;
+  if (!cfg) return;
+
+  const verifier   = await genCodeVerifier();
+  const challenge  = await genCodeChallenge(verifier);
+  sessionStorage.setItem(SK.PKCE_V, verifier);
+
+  const params = new URLSearchParams({
+    response_type:         'code',
+    client_id:             cfg.clientId,
+    redirect_uri:          cfg.redirectUri,
+    scope:                 'all',
+    code_challenge:        challenge,
+    code_challenge_method: 'S256',
+  });
+
+  window.location.href = `${cfg.authServer}/authorize?${params.toString()}`;
+}
+
+async function handleAuthCallback(code) {
+  const cfg      = S.config;
+  const verifier = sessionStorage.getItem(SK.PKCE_V);
+
+  if (!verifier) {
+    showToast('Auth error: missing code verifier. Please sign in again.', 'error');
+    showScreen('auth');
+    return;
+  }
+
+  try {
+    const body = new URLSearchParams({
+      grant_type:    'authorization_code',
+      client_id:     cfg.clientId,
+      redirect_uri:  cfg.redirectUri,
+      code:          code,
+      code_verifier: verifier,
+    });
+
+    const resp = await fetch(`${cfg.authServer}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error(`Token exchange failed (${resp.status}): ${errText}`);
+    }
+
+    const tokens = await resp.json();
+
+    const authData = {
+      access_token:  tokens.access_token,
+      refresh_token: tokens.refresh_token || null,
+      expires_at:    Date.now() + ((tokens.expires_in || 3600) * 1000),
+      agent_id:      null,
+      agent_name:    null,
+    };
+
+    // Try to decode agent info from JWT payload
+    try {
+      const parts   = tokens.access_token.split('.');
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      authData.agent_id   = payload.agent_id   || payload.nameid   || null;
+      authData.agent_name = payload.agent_name || payload.unique_name || payload.name || null;
+    } catch (_) { /* ignore – will fetch from API */ }
+
+    saveAuth(authData);
+    S.auth = authData;
+    sessionStorage.removeItem(SK.PKCE_V);
+
+    // Clean up URL
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    if (!S.auth.agent_id) await fetchAgentInfo();
+
+    await initApp();
+  } catch (err) {
+    console.error('Auth callback error:', err);
+    showToast('Sign-in failed: ' + err.message, 'error');
+    showScreen('auth');
+  }
+}
+
+async function fetchAgentInfo() {
+  try {
+    const data = await apiRequest('/Agent?self=true');
+    const agents = Array.isArray(data) ? data : (data && data.agents ? data.agents : []);
+    if (agents.length > 0) {
+      S.auth.agent_id   = agents[0].id;
+      S.auth.agent_name = agents[0].name;
+      saveAuth(S.auth);
+    }
+  } catch (_) {
+    try {
+      const me = await apiRequest('/Me');
+      if (me) {
+        S.auth.agent_id   = me.id   || me.agent_id;
+        S.auth.agent_name = me.name || me.username;
+        saveAuth(S.auth);
+      }
+    } catch (e) { console.warn('Could not resolve agent info:', e); }
+  }
+}
+
+async function refreshAccessToken() {
+  const auth = S.auth;
+  if (!auth?.refresh_token) return false;
+  try {
+    const resp = await fetch(`${S.config.authServer}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'refresh_token',
+        client_id:     S.config.clientId,
+        refresh_token: auth.refresh_token,
+      }).toString(),
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 400 || resp.status === 401) {
+        clearAuth(); S.auth = null;
+        showScreen('auth');
+      }
+      return false;
+    }
+
+    const tokens    = await resp.json();
+    S.auth.access_token  = tokens.access_token;
+    if (tokens.refresh_token) S.auth.refresh_token = tokens.refresh_token;
+    S.auth.expires_at   = Date.now() + ((tokens.expires_in || 3600) * 1000);
+    saveAuth(S.auth);
+    return true;
+  } catch (err) {
+    console.error('Token refresh error:', err);
+    return false;
+  }
+}
+
+async function ensureValidToken() {
+  if (!S.auth) return false;
+  if (Date.now() + TOKEN_REFRESH_BUFFER_MS >= S.auth.expires_at) {
+    return refreshAccessToken();
+  }
+  return true;
+}
+
+function signOut() {
+  stopTimer();
+  stopGPS();
+  clearAuth();
+  S.auth    = null;
+  S.tickets = [];
+  S.clientCache = {};
+  S.siteCache   = {};
+  S.photos  = [];
+  updateConnectionBadge();
+  showScreen('auth');
+}
+
+// ─────────────────────────────────────────────────────────
+// API FUNCTIONS
+// ─────────────────────────────────────────────────────────
+async function apiRequest(path, options = {}) {
+  await ensureValidToken();
+  if (!S.auth?.access_token) throw new Error('Not authenticated');
+
+  const url  = `${S.config.resourceServer}${path}`;
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${S.auth.access_token}`,
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  if (resp.status === 401) {
+    clearAuth(); S.auth = null;
+    showScreen('auth');
+    throw new Error('Session expired — please sign in again');
+  }
+
+  if (!resp.ok) throw new Error(`API error ${resp.status}: ${resp.statusText}`);
+  if (resp.status === 204) return null;
+  return resp.json();
+}
+
+async function loadTickets() {
+  S.isLoading = true;
+  renderTicketList();
+
+  try {
+    const filter = S.config?.ticketFilter || 'mine';
+    let url = '/Tickets?open_only=true&count=50';
+    if (filter === 'mine' && S.auth?.agent_id) url += `&agentid=${S.auth.agent_id}`;
+
+    const data    = await apiRequest(url);
+    S.tickets     = Array.isArray(data) ? data : (data?.tickets || []);
+    updateConnectionBadge();
+  } catch (err) {
+    console.error('Ticket load error:', err);
+    showToast('Failed to load tickets: ' + err.message, 'error');
+    updateConnectionBadge(true);
+  }
+
+  S.isLoading = false;
+  renderTicketList();
+}
+
+async function loadClientDetail(clientId) {
+  if (!clientId) return null;
+  if (S.clientCache[clientId]) return S.clientCache[clientId];
+  try {
+    const data = await apiRequest(`/Client/${clientId}`);
+    S.clientCache[clientId] = data;
+    return data;
+  } catch { return null; }
+}
+
+async function loadSiteDetail(siteId) {
+  if (!siteId) return null;
+  if (S.siteCache[siteId]) return S.siteCache[siteId];
+  try {
+    const data = await apiRequest(`/Site/${siteId}`);
+    S.siteCache[siteId] = data;
+    return data;
+  } catch { return null; }
+}
+
+async function postTimeEntry(entry) {
+  return apiRequest('/Action', {
+    method: 'POST',
+    body: JSON.stringify([{
+      ticket_id:     entry.ticketId,
+      timetaken:     Math.round(entry.minutes),
+      startdatetime: entry.startDatetime,
+      note:          entry.note || '',
+      billable:      true,
+      actiontype_id: parseInt(S.config?.actionTypeId || '2', 10),
+    }]),
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// JOB STATE MACHINE
+// ─────────────────────────────────────────────────────────
+function jobPhase() {
+  if (!S.activeJob) return 'none';
+  const j = S.activeJob;
+  if (!j.travelStart && !j.onsiteStart)            return 'ready';
+  if (j.travelStart  && !j.travelEnd && !j.onsiteStart) return 'traveling';
+  if ((j.travelEnd || j.travelStart) && !j.onsiteStart) return 'arrived';
+  if (j.onsiteStart  && !j.onsiteEnd)              return 'onsite';
+  if (j.onsiteEnd)                                 return 'done';
+  return 'ready';
+}
+
+function startJob(ticket) {
+  if (S.activeJob && S.activeJob.ticketId !== ticket.id) {
+    showToast('Finish the current job before starting a new one.', 'warning');
+    return false;
+  }
+  if (!S.activeJob) {
+    S.activeJob = {
+      ticketId:      ticket.id,
+      ticketSummary: ticket.summary,
+      travelStart:   null,
+      travelEnd:     null,
+      onsiteStart:   null,
+      onsiteEnd:     null,
+      onsiteGPS:     null,
+      log:           [],
+    };
+    saveActiveJob();
+    addJobLog('note', `Job started for #${ticket.id}`);
+  }
+  return true;
+}
+
+function doStartTravel() {
+  if (!S.activeJob) return;
+  S.activeJob.travelStart = new Date().toISOString();
+  saveActiveJob();
+  addJobLog('travel', 'Travel started');
+  addTodayEntry('travel', `Travel started — #${S.activeJob.ticketId}`, S.activeJob.ticketId);
+  startTimer();
+  updateActiveJobBanner();
+  rerenderDetailActivity();
+}
+
+function doStopTravel() {
+  if (!S.activeJob) return;
+  S.activeJob.travelEnd = new Date().toISOString();
+  const mins = minutesBetween(S.activeJob.travelStart, S.activeJob.travelEnd);
+  saveActiveJob();
+  addJobLog('travel', `Travel ended (${mins} min)`);
+  addTodayEntry('travel', `Travel ended — #${S.activeJob.ticketId} (${mins} min)`, S.activeJob.ticketId, mins);
+  stopTimer();
+  updateActiveJobBanner();
+  rerenderDetailActivity();
+}
+
+function doCheckIn() {
+  if (!S.activeJob) return;
+  S.activeJob.onsiteStart = new Date().toISOString();
+  if (S.gpsPos) {
+    const { latitude: lat, longitude: lon, accuracy: acc } = S.gpsPos.coords;
+    S.activeJob.onsiteGPS = { lat, lon, acc };
+    addJobLog('onsite', `Checked in at ${lat.toFixed(5)}, ${lon.toFixed(5)} (±${Math.round(acc)}m)`);
+  } else {
+    addJobLog('onsite', 'Checked in (no GPS fix)');
+  }
+  saveActiveJob();
+  addTodayEntry('onsite', `Checked in — #${S.activeJob.ticketId}`, S.activeJob.ticketId);
+  startTimer();
+  updateActiveJobBanner();
+  rerenderDetailActivity();
+}
+
+function doCheckOut() {
+  if (!S.activeJob) return;
+  S.activeJob.onsiteEnd = new Date().toISOString();
+  const mins = minutesBetween(S.activeJob.onsiteStart, S.activeJob.onsiteEnd);
+  saveActiveJob();
+  addJobLog('onsite', `Checked out (${mins} min onsite)`);
+  addTodayEntry('onsite', `Checked out — #${S.activeJob.ticketId} (${mins} min)`, S.activeJob.ticketId, mins);
+  stopTimer();
+  updateActiveJobBanner();
+  rerenderDetailActivity();
+}
+
+function addJobLog(type, text) {
+  if (!S.activeJob) return;
+  S.activeJob.log.push({ ts: new Date().toISOString(), type, text });
+  saveActiveJob();
+}
+
+function addTodayEntry(type, text, ticketId, mins) {
+  S.todayLog.push({ ts: new Date().toISOString(), type, text, ticketId, mins });
+  saveTodayLog();
+  if (S.currentTab === 'activity') renderTodayActivity();
+}
+
+function minutesBetween(a, b) {
+  if (!a || !b) return 0;
+  return Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
+}
+
+function formatDuration(mins) {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+// ─────────────────────────────────────────────────────────
+// TIMER
+// ─────────────────────────────────────────────────────────
+function startTimer() {
+  if (S.timerHandle) return;
+  S.timerHandle = setInterval(tickTimer, 1000);
+}
+
+function stopTimer() {
+  if (S.timerHandle) { clearInterval(S.timerHandle); S.timerHandle = null; }
+}
+
+function tickTimer() {
+  updateBannerTimer();
+}
+
+function elapsedSecs(since) {
+  return Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+}
+
+function fmtTime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+}
+
+function updateBannerTimer() {
+  if (!S.activeJob) return;
+  const phase = jobPhase();
+  let secs = 0;
+  if (phase === 'traveling' && S.activeJob.travelStart) secs = elapsedSecs(S.activeJob.travelStart);
+  else if (phase === 'onsite' && S.activeJob.onsiteStart) secs = elapsedSecs(S.activeJob.onsiteStart);
+  const el = document.getElementById('banner-timer');
+  if (el) el.textContent = fmtTime(secs);
+}
+
+// ─────────────────────────────────────────────────────────
+// GPS
+// ─────────────────────────────────────────────────────────
+function startGPS() {
+  if (!navigator.geolocation) { setGPSStatus('GPS not available on this device'); return; }
+  setGPSStatus('Acquiring GPS…');
+  S.gpsWatch = navigator.geolocation.watchPosition(
+    pos => {
+      S.gpsPos = pos;
+      const { latitude: la, longitude: lo, accuracy: ac } = pos.coords;
+      setGPSStatus(`${la.toFixed(5)}, ${lo.toFixed(5)}  ±${Math.round(ac)} m`);
+    },
+    err => setGPSStatus('GPS unavailable: ' + err.message),
+    { enableHighAccuracy: true, timeout: 20000 }
+  );
+}
+
+function stopGPS() {
+  if (S.gpsWatch !== null) { navigator.geolocation.clearWatch(S.gpsWatch); S.gpsWatch = null; }
+}
+
+function setGPSStatus(txt) {
+  const el = document.getElementById('gps-status-text');
+  if (el) el.textContent = txt;
+}
+
+// ─────────────────────────────────────────────────────────
+// PHOTOS
+// ─────────────────────────────────────────────────────────
+function addPhoto(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    S.photos.push({ dataUrl: e.target.result, name: file.name, ts: new Date().toISOString() });
+    addJobLog('photo', `Photo added: ${file.name}`);
+    addTodayEntry('photo', `Photo — #${S.activeJob?.ticketId || '?'}`, S.activeJob?.ticketId);
+    renderPhotos();
+    rerenderDetailActivity();
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto(idx) {
+  S.photos.splice(idx, 1);
+  renderPhotos();
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — SCREENS & TABS
+// ─────────────────────────────────────────────────────────
+function showScreen(name) {
+  ['config', 'auth', 'app'].forEach(n => {
+    const el = document.getElementById(`screen-${n}`);
+    if (el) el.classList.toggle('hidden', n !== name);
+  });
+}
+
+function switchTab(tab) {
+  S.currentTab = tab;
+  ['dashboard', 'activity', 'settings'].forEach(t => {
+    const pane = document.getElementById(`tab-${t}`);
+    const btn  = document.querySelector(`.nav-btn[data-tab="${t}"]`);
+    if (pane) pane.classList.toggle('hidden', t !== tab);
+    if (btn)  btn.classList.toggle('active',  t === tab);
+  });
+  if (tab === 'activity')  renderTodayActivity();
+  if (tab === 'settings')  populateSettingsForm();
+}
+
+function showTicketDetail(ticket) {
+  S.currentTicket = ticket;
+  document.getElementById('detail-tid').textContent     = `#${ticket.id}`;
+  document.getElementById('detail-summary').textContent = ticket.summary;
+  document.getElementById('ticket-detail').classList.remove('hidden');
+  document.querySelector('.bottom-nav').classList.add('hidden');
+  renderDetailBody(ticket);
+  startGPS();
+}
+
+function hideTicketDetail() {
+  document.getElementById('ticket-detail').classList.add('hidden');
+  document.querySelector('.bottom-nav').classList.remove('hidden');
+  stopGPS();
+  S.gpsPos = null;
+  S.currentTicket = null;
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — CONNECTION BADGE
+// ─────────────────────────────────────────────────────────
+function updateConnectionBadge(error = false) {
+  const badge = document.getElementById('conn-badge');
+  const label = document.getElementById('badge-label');
+  if (!badge || !label) return;
+
+  badge.className = 'badge';
+  if (error) {
+    badge.classList.add('badge-red');
+    label.textContent = 'Error';
+  } else if (S.auth?.access_token) {
+    badge.classList.add('badge-green');
+    label.textContent = S.config?.tenant || 'Connected';
+  } else {
+    badge.classList.add('badge-gray');
+    label.textContent = 'Not connected';
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — ACTIVE JOB BANNER
+// ─────────────────────────────────────────────────────────
+function updateActiveJobBanner() {
+  const banner = document.getElementById('job-banner');
+  const phase  = jobPhase();
+
+  if (!S.activeJob || phase === 'none') {
+    banner.classList.add('hidden');
+    stopTimer();
+    return;
+  }
+
+  banner.classList.remove('hidden');
+  document.getElementById('banner-id').textContent      = `#${S.activeJob.ticketId}`;
+  document.getElementById('banner-summary').textContent = S.activeJob.ticketSummary;
+
+  updateBannerTimer();
+
+  const btn = document.getElementById('banner-btn');
+  switch (phase) {
+    case 'ready':     btn.textContent = 'Start Travel'; btn.dataset.action = 'startTravel'; break;
+    case 'traveling': btn.textContent = 'Stop Travel';  btn.dataset.action = 'stopTravel';  break;
+    case 'arrived':   btn.textContent = 'Check In';     btn.dataset.action = 'checkIn';     break;
+    case 'onsite':    btn.textContent = 'Check Out';    btn.dataset.action = 'checkOut';    break;
+    case 'done':      btn.textContent = 'Finish & Log'; btn.dataset.action = 'finishLog';   break;
+  }
+
+  if (phase === 'traveling' || phase === 'onsite') startTimer();
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — TICKET LIST
+// ─────────────────────────────────────────────────────────
+function priorityColor(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('critical') || n.includes('high') || n.includes('urgent')) return 'var(--danger)';
+  if (n.includes('medium')   || n.includes('normal'))                       return 'var(--warning)';
+  if (n.includes('low'))                                                     return 'var(--success)';
+  return 'var(--muted)';
+}
+
+function renderTicketList() {
+  const el = document.getElementById('ticket-list');
+  if (!el) return;
+
+  if (S.isLoading) {
+    el.innerHTML = [0,1,2,3].map(() => `
+      <div class="skeleton-card">
+        <div class="skeleton skeleton-line short"></div>
+        <div class="skeleton skeleton-line long"  style="margin-top:10px"></div>
+        <div class="skeleton skeleton-line medium" style="margin-top:8px"></div>
+      </div>`).join('');
+    return;
+  }
+
+  if (!S.tickets.length) {
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-text">No tickets found</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = S.tickets.map(t => {
+    const pc = priorityColor(t.priority_name);
+    return `<div class="ticket-card" data-ticket-id="${t.id}" style="--priority-color:${pc}">
+      <div class="ticket-id">#${t.id}</div>
+      <div class="ticket-summary">${esc(t.summary)}</div>
+      <div class="ticket-meta">
+        <span>${esc(t.client_name || '')}</span>
+        ${t.priority_name ? `<span class="ticket-priority" style="color:${pc}">${esc(t.priority_name)}</span>` : ''}
+        ${t.status_name   ? `<span style="color:var(--muted)">${esc(t.status_name)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — TICKET DETAIL BODY
+// ─────────────────────────────────────────────────────────
+async function renderDetailBody(ticket) {
+  const body = document.getElementById('detail-body');
+  body.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">Loading details…</p>`;
+
+  const [client, site] = await Promise.all([
+    loadClientDetail(ticket.client_id),
+    loadSiteDetail(ticket.site_id),
+  ]);
+
+  body.innerHTML = buildDetailHTML(ticket, client, site);
+  bindDetailEvents(ticket, client, site);
+}
+
+function buildDetailHTML(ticket, client, site) {
+  const isActive   = S.activeJob?.ticketId === ticket.id;
+  const phase      = isActive ? jobPhase() : 'none';
+
+  // Build address for Maps link
+  const addrParts = [
+    site?.address_1, site?.address_2,
+    site?.city, site?.state, site?.postcode,
+  ].filter(Boolean);
+  const addrStr   = addrParts.join(', ');
+  const mapsUrl   = addrStr ? `https://maps.google.com/?q=${encodeURIComponent(addrStr)}` : null;
+
+  // Wrong-site URL: strip /api path and go to web UI
+  const haloBase  = (S.config?.resourceServer || '').replace(/\/api\/?$/i, '');
+  const wrongSite = `${haloBase}/client/${ticket.client_id}`;
+
+  return `
+  <!-- Job Actions -->
+  <div class="info-card">
+    <div class="info-card-header">Job Actions</div>
+    <div class="info-card-body">
+      <div class="job-actions" id="job-actions-container">
+        ${buildJobActionButtons(ticket, phase, isActive)}
+      </div>
+    </div>
+  </div>
+
+  <!-- Client & Site Info -->
+  <div class="info-card">
+    <div class="info-card-header">Client &amp; Site</div>
+    <div class="info-card-body">
+      ${client ? `
+      <div class="info-row">
+        <span class="info-label">Client</span>
+        <span class="info-value">
+          ${client.phone ? `<a href="tel:${client.phone}" class="info-link">${esc(client.name)}</a>` : esc(client.name || '')}
+        </span>
+      </div>` : ''}
+      ${site ? `
+      <div class="info-row">
+        <span class="info-label">Site</span>
+        <span class="info-value">
+          ${site.phone ? `<a href="tel:${site.phone}" class="info-link">${esc(site.name)}</a>` : esc(site.name || '')}
+        </span>
+      </div>
+      ${addrStr ? `
+      <div class="info-row">
+        <span class="info-label">Address</span>
+        <span class="info-value">
+          <a href="${esc(mapsUrl)}" target="_blank" rel="noopener" class="info-link">${esc(addrStr)}</a>
+        </span>
+      </div>` : ''}` : ''}
+      ${client?.website ? `
+      <div class="info-row">
+        <span class="info-label">Web</span>
+        <span class="info-value"><a href="${esc(client.website)}" target="_blank" rel="noopener" class="info-link">${esc(client.website)}</a></span>
+      </div>` : ''}
+      ${site?.website && site.website !== client?.website ? `
+      <div class="info-row">
+        <span class="info-label">Site web</span>
+        <span class="info-value"><a href="${esc(site.website)}" target="_blank" rel="noopener" class="info-link">${esc(site.website)}</a></span>
+      </div>` : ''}
+      <div class="info-row">
+        <span class="info-label"></span>
+        <span class="info-value">
+          <a href="${esc(wrongSite)}" target="_blank" rel="noopener" class="wrong-site-link">
+            Wrong site? View all sites for ${esc(client?.name || 'this client')}
+          </a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- GPS Card -->
+  <div class="info-card">
+    <div class="info-card-header">GPS</div>
+    <div class="info-card-body">
+      <p class="gps-status"><span id="gps-status-text">Starting GPS…</span></p>
+      ${!isActive || phase === 'ready' || phase === 'arrived' ? `
+      <div class="job-actions">
+        <button class="btn btn-secondary btn-sm" id="btn-start-travel-gps">▶ Start Travel</button>
+        <button class="btn btn-success btn-sm"   id="btn-check-in-gps">📍 Check In</button>
+      </div>` : ''}
+    </div>
+  </div>
+
+  <!-- Activity Log -->
+  <div class="info-card">
+    <div class="info-card-header">Activity Log</div>
+    <div class="info-card-body" id="detail-activity-log">
+      ${renderJobLog()}
+    </div>
+  </div>
+
+  <!-- Photos -->
+  <div class="info-card">
+    <div class="info-card-header">Photos</div>
+    <div class="info-card-body">
+      <div id="photo-grid" class="photo-grid">
+        ${renderPhotoGrid()}
+      </div>
+    </div>
+  </div>
+
+  <!-- Field Notes -->
+  <div class="info-card">
+    <div class="info-card-header">Field Notes</div>
+    <div class="info-card-body">
+      <div class="form-group">
+        <textarea id="field-note-text" class="inp" placeholder="Enter field note…" rows="3"></textarea>
+      </div>
+      <button id="btn-log-note" class="btn btn-secondary btn-full">Log Note</button>
+    </div>
+  </div>
+
+  <!-- Manual Time Entry -->
+  <div class="info-card">
+    <div class="info-card-header">Manual Time Entry</div>
+    <div class="info-card-body">
+      <div class="time-row">
+        <div class="form-group">
+          <label class="lbl" for="te-start">Start</label>
+          <input type="time" id="te-start" class="inp">
+        </div>
+        <div class="form-group">
+          <label class="lbl" for="te-end">End</label>
+          <input type="time" id="te-end" class="inp">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="lbl" for="te-type">Work Type</label>
+        <select id="te-type" class="inp sel">
+          <option value="onsite">On-Site</option>
+          <option value="travel">Travel</option>
+          <option value="remote">Remote</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <textarea id="te-note" class="inp" placeholder="Work performed…" rows="3"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button id="btn-autofill" class="btn btn-ghost" style="flex:1">Autofill from tracker</button>
+      </div>
+      <button id="btn-post-time" class="btn btn-primary btn-full">Post to Halo</button>
+    </div>
+  </div>
+  `;
+}
+
+function buildJobActionButtons(ticket, phase, isActive) {
+  if (!isActive) {
+    return `<button class="btn btn-secondary" data-action="startTravel" data-ticket-id="${ticket.id}">▶ Start Travel</button>
+            <button class="btn btn-success"   data-action="checkIn"    data-ticket-id="${ticket.id}">📍 Check In</button>`;
+  }
+  switch (phase) {
+    case 'ready':     return `<button class="btn btn-secondary btn-full" data-action="startTravel">▶ Start Travel</button>
+                               <button class="btn btn-success btn-full"   data-action="checkIn">📍 Check In</button>`;
+    case 'traveling': return `<button class="btn btn-warning btn-full" data-action="stopTravel">⏹ Stop Travel</button>`;
+    case 'arrived':   return `<button class="btn btn-success btn-full" data-action="checkIn">📍 Check In</button>`;
+    case 'onsite':    return `<button class="btn btn-warning btn-full" data-action="checkOut">⏹ Check Out</button>`;
+    case 'done':      return `<button class="btn btn-accent btn-full"  data-action="finishLog">✅ Finish &amp; Log</button>`;
+    default:          return '';
+  }
+}
+
+function bindDetailEvents(ticket, client, site) {
+  // GPS card buttons (rendered only when appropriate)
+  const gpsTravel = document.getElementById('btn-start-travel-gps');
+  const gpsCheckIn = document.getElementById('btn-check-in-gps');
+  if (gpsTravel)  gpsTravel.addEventListener('click', () => handleJobAction('startTravel', ticket));
+  if (gpsCheckIn) gpsCheckIn.addEventListener('click', () => handleJobAction('checkIn', ticket));
+
+  // Job action buttons in actions card
+  document.getElementById('job-actions-container')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (btn) handleJobAction(btn.dataset.action, ticket);
+  });
+
+  // Log note
+  document.getElementById('btn-log-note')?.addEventListener('click', () => {
+    const txt = document.getElementById('field-note-text')?.value?.trim();
+    if (!txt) return;
+    if (!S.activeJob) startJob(ticket);
+    addJobLog('note', txt);
+    addTodayEntry('note', txt, ticket.id);
+    document.getElementById('field-note-text').value = '';
+    rerenderDetailActivity();
+    showToast('Note logged', 'success');
+  });
+
+  // Autofill time entry from tracker
+  document.getElementById('btn-autofill')?.addEventListener('click', () => {
+    if (!S.activeJob || S.activeJob.ticketId !== ticket.id) { showToast('No tracker data for this ticket', 'warning'); return; }
+    const j = S.activeJob;
+    const startTs = j.onsiteStart || j.travelStart;
+    const endTs   = j.onsiteEnd   || j.travelEnd;
+    if (startTs) document.getElementById('te-start').value = timeLocal(startTs);
+    if (endTs)   document.getElementById('te-end').value   = timeLocal(endTs);
+    showToast('Time fields populated', 'info');
+  });
+
+  // Post time entry
+  document.getElementById('btn-post-time')?.addEventListener('click', () => postTimeFromForm(ticket));
+
+  // Photo events (initial bind — renderPhotos() rebinds on each update)
+  bindPhotoEvents();
+}
+
+async function postTimeFromForm(ticket) {
+  const startVal = document.getElementById('te-start')?.value;
+  const endVal   = document.getElementById('te-end')?.value;
+  const note     = document.getElementById('te-note')?.value || '';
+
+  if (!startVal || !endVal) { showToast('Please enter start and end times', 'warning'); return; }
+
+  const [sh, sm] = startVal.split(':').map(Number);
+  const [eh, em] = endVal.split(':').map(Number);
+  const totalMins = (eh * 60 + em) - (sh * 60 + sm);
+  if (totalMins <= 0) { showToast('End time must be after start time', 'warning'); return; }
+
+  const today  = new Date();
+  const startDt = new Date(today.getFullYear(), today.getMonth(), today.getDate(), sh, sm).toISOString();
+
+  const btn = document.getElementById('btn-post-time');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Posting…';
+
+  try {
+    await postTimeEntry({ ticketId: ticket.id, minutes: totalMins, startDatetime: startDt, note });
+    addTodayEntry('note', `Time entry posted — #${ticket.id} (${formatDuration(totalMins)})`, ticket.id, totalMins);
+    showToast(`Time entry posted: ${formatDuration(totalMins)}`, 'success');
+    document.getElementById('te-start').value = '';
+    document.getElementById('te-end').value   = '';
+    document.getElementById('te-note').value  = '';
+  } catch (err) {
+    showToast('Failed to post: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Post to Halo';
+  }
+}
+
+function handleJobAction(action, ticket) {
+  switch (action) {
+    case 'startTravel':
+      if (!startJob(ticket)) return;
+      doStartTravel();
+      break;
+    case 'stopTravel':
+      doStopTravel();
+      break;
+    case 'checkIn':
+      if (!startJob(ticket)) return;
+      doCheckIn();
+      break;
+    case 'checkOut':
+      doCheckOut();
+      break;
+    case 'finishLog':
+      openFinishSheet();
+      return;
+  }
+  // Refresh job action buttons in detail
+  const container = document.getElementById('job-actions-container');
+  if (container) {
+    const isActive = S.activeJob?.ticketId === ticket.id;
+    const phase    = isActive ? jobPhase() : 'none';
+    container.innerHTML = buildJobActionButtons(ticket, phase, isActive);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — JOB LOG & PHOTOS (within detail)
+// ─────────────────────────────────────────────────────────
+function renderJobLog() {
+  const log = S.activeJob?.log || [];
+  if (!log.length) return `<p style="color:var(--muted);font-size:13px">No activity yet</p>`;
+
+  return log.map(e => `
+    <div class="activity-entry">
+      <div class="act-dot act-dot-${e.type}"></div>
+      <span class="act-time">${fmtTimeShort(e.ts)}</span>
+      <span class="act-text">${esc(e.text)}</span>
+    </div>`).join('');
+}
+
+function rerenderDetailActivity() {
+  const el = document.getElementById('detail-activity-log');
+  if (el) el.innerHTML = renderJobLog();
+}
+
+function renderPhotoGrid() {
+  const grid = S.photos.map((p, i) => `
+    <div class="photo-thumb">
+      <img src="${p.dataUrl}" alt="${esc(p.name)}" loading="lazy">
+      <button class="photo-remove" data-idx="${i}" aria-label="Remove photo">✕</button>
+    </div>`).join('');
+
+  return grid + `
+    <button class="photo-add" id="btn-add-photo" aria-label="Add photo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Add photo</span>
+    </button>`;
+}
+
+function renderPhotos() {
+  const grid = document.getElementById('photo-grid');
+  if (grid) grid.innerHTML = renderPhotoGrid();
+  bindPhotoEvents();
+}
+
+function bindPhotoEvents() {
+  document.getElementById('btn-add-photo')?.addEventListener('click', () => {
+    document.getElementById('photo-input').click();
+  });
+  document.querySelectorAll('.photo-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      removePhoto(parseInt(btn.dataset.idx, 10));
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — TODAY ACTIVITY TAB
+// ─────────────────────────────────────────────────────────
+function renderTodayActivity() {
+  const logEl    = document.getElementById('today-log');
+  const totalsEl = document.getElementById('activity-totals');
+  if (!logEl) return;
+
+  const log = S.todayLog;
+
+  if (!log.length) {
+    logEl.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No activity today</div></div>`;
+    if (totalsEl) totalsEl.innerHTML = '';
+    return;
+  }
+
+  // Totals
+  const uniqueTickets = new Set(log.map(e => e.ticketId).filter(Boolean)).size;
+  const totalMins     = log.reduce((acc, e) => acc + (e.mins || 0), 0);
+
+  if (totalsEl) {
+    totalsEl.innerHTML = `
+      <div class="total-chip">
+        <span class="total-value">${uniqueTickets}</span>
+        <span class="total-label">Tickets</span>
+      </div>
+      <div class="total-chip">
+        <span class="total-value">${formatDuration(totalMins)}</span>
+        <span class="total-label">Logged</span>
+      </div>`;
+  }
+
+  logEl.innerHTML = [...log].reverse().map(e => `
+    <div class="activity-entry">
+      <div class="act-dot act-dot-${e.type || 'note'}"></div>
+      <span class="act-time">${fmtTimeShort(e.ts)}</span>
+      <span class="act-text">${esc(e.text)}</span>
+    </div>`).join('');
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — SETTINGS FORM
+// ─────────────────────────────────────────────────────────
+function populateSettingsForm() {
+  const c = S.config || {};
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  setVal('set-tenant',      c.tenant);
+  setVal('set-auth',        c.authServer);
+  setVal('set-api',         c.resourceServer);
+  setVal('set-client-id',   c.clientId);
+  setVal('set-redirect',    c.redirectUri);
+  setVal('set-action-type', c.actionTypeId || '2');
+  const filterEl = document.getElementById('set-filter');
+  if (filterEl) filterEl.value = c.ticketFilter || 'mine';
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — FINISH & LOG BOTTOM SHEET
+// ─────────────────────────────────────────────────────────
+function openFinishSheet() {
+  const j     = S.activeJob;
+  if (!j) return;
+  const onMins  = minutesBetween(j.onsiteStart, j.onsiteEnd || new Date().toISOString());
+  const trMins  = minutesBetween(j.travelStart, j.travelEnd || (j.onsiteStart || new Date().toISOString()));
+  const photoC  = S.photos.length;
+  const noteC   = j.log.filter(e => e.type === 'note').length;
+
+  document.getElementById('sheet-body').innerHTML = `
+    <h2 class="sheet-title">Finish &amp; Log</h2>
+    <div class="summary-row">
+      <span class="summary-key">Ticket</span>
+      <span class="summary-val">#${j.ticketId}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-key">On-site time</span>
+      <span class="summary-val">${formatDuration(onMins)}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-key">Travel time</span>
+      <span class="summary-val">${formatDuration(trMins)}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-key">Photos</span>
+      <span class="summary-val">${photoC}</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-key">Field notes</span>
+      <span class="summary-val">${noteC}</span>
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <label class="lbl" for="finish-note">Final note</label>
+      <textarea id="finish-note" class="inp" rows="4" placeholder="Summary of work performed…"></textarea>
+    </div>
+    <button id="btn-post-finish" class="btn btn-primary btn-full mt-8">Post Time Entry</button>
+    <button id="btn-cancel-sheet" class="btn btn-ghost btn-full mt-8">Cancel</button>
+  `;
+
+  // Pre-populate from existing notes
+  const notes = j.log.filter(e => e.type === 'note').map(e => e.text).join('\n');
+  if (notes) document.getElementById('finish-note').value = notes;
+
+  document.getElementById('btn-post-finish').addEventListener('click', () => submitFinishLog(j, onMins));
+  document.getElementById('btn-cancel-sheet').addEventListener('click', closeSheet);
+
+  openSheet();
+}
+
+async function submitFinishLog(job, onMins) {
+  const note   = document.getElementById('finish-note')?.value || '';
+  const startDt = job.onsiteStart || job.travelStart || new Date().toISOString();
+  const btn    = document.getElementById('btn-post-finish');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Posting…';
+
+  try {
+    await postTimeEntry({ ticketId: job.ticketId, minutes: onMins || 1, startDatetime: startDt, note });
+    addTodayEntry('note', `Job finished & logged — #${job.ticketId} (${formatDuration(onMins)})`, job.ticketId, onMins);
+    showToast('Time entry posted successfully!', 'success');
+    S.activeJob = null;
+    saveActiveJob();
+    S.photos = [];
+    stopTimer();
+    updateActiveJobBanner();
+    closeSheet();
+  } catch (err) {
+    showToast('Failed to post: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Post Time Entry';
+  }
+}
+
+function openSheet() {
+  document.getElementById('sheet-backdrop').classList.remove('hidden');
+  document.getElementById('bottom-sheet').classList.remove('hidden');
+  requestAnimationFrame(() => document.getElementById('bottom-sheet').classList.add('open'));
+}
+
+function closeSheet() {
+  const sheet = document.getElementById('bottom-sheet');
+  sheet.classList.remove('open');
+  setTimeout(() => {
+    sheet.classList.add('hidden');
+    document.getElementById('sheet-backdrop').classList.add('hidden');
+  }, 300);
+}
+
+// ─────────────────────────────────────────────────────────
+// UI — TOASTS
+// ─────────────────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const zone  = document.getElementById('toast-zone');
+  if (!zone) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = msg;
+  zone.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 2500);
+}
+
+// ─────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function fmtTimeShort(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function timeLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+// ─────────────────────────────────────────────────────────
+// EVENT HANDLERS
+// ─────────────────────────────────────────────────────────
+function bindGlobalEvents() {
+
+  // Config screen — save & connect
+  document.getElementById('btn-save-config').addEventListener('click', () => {
+    const cfg = collectConfigForm('cfg');
+    if (!cfg) return;
+    saveConfig(cfg);
+    S.config = cfg;
+    showScreen('auth');
+    updateAuthSubtitle();
+    startAuth();
+  });
+
+  // Auth screen — sign in
+  document.getElementById('btn-sign-in').addEventListener('click', () => startAuth());
+
+  // Auth screen — reconfigure
+  document.getElementById('btn-reconfigure').addEventListener('click', () => {
+    populateConfigForm();
+    showScreen('config');
+  });
+
+  // Ticket list — tap card
+  document.getElementById('ticket-list').addEventListener('click', e => {
+    const card = e.target.closest('.ticket-card');
+    if (!card) return;
+    const id = card.dataset.ticketId;
+    const ticket = S.tickets.find(t => String(t.id) === String(id));
+    if (ticket) showTicketDetail(ticket);
+  });
+
+  // Back button in ticket detail
+  document.getElementById('btn-back').addEventListener('click', () => hideTicketDetail());
+
+  // Bottom nav
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // Refresh tickets
+  document.getElementById('btn-refresh').addEventListener('click', () => loadTickets());
+
+  // Banner action button
+  document.getElementById('banner-btn').addEventListener('click', () => {
+    const action = document.getElementById('banner-btn').dataset.action;
+    if (action === 'finishLog') { openFinishSheet(); return; }
+    if (!S.activeJob) return;
+    const fakeTicket = { id: S.activeJob.ticketId, summary: S.activeJob.ticketSummary };
+    handleJobAction(action, fakeTicket);
+  });
+
+  // Settings — save
+  document.getElementById('btn-save-settings').addEventListener('click', () => {
+    const cfg = collectConfigForm('set');
+    if (!cfg) return;
+    saveConfig(cfg);
+    S.config = cfg;
+    showToast('Settings saved', 'success');
+    updateConnectionBadge();
+  });
+
+  // Settings — reload tickets
+  document.getElementById('btn-reload').addEventListener('click', () => {
+    switchTab('dashboard');
+    loadTickets();
+  });
+
+  // Settings — sign out
+  document.getElementById('btn-sign-out').addEventListener('click', () => {
+    if (confirm('Sign out?')) signOut();
+  });
+
+  // Photo input
+  document.getElementById('photo-input').addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (file) addPhoto(file);
+    e.target.value = '';
+  });
+
+  // Sheet backdrop — dismiss on tap
+  document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
+}
+
+function collectConfigForm(prefix) {
+  const get = id => document.getElementById(`${prefix}-${id}`)?.value?.trim() || '';
+  const cfg = {
+    tenant:         get('tenant'),
+    authServer:     get('auth').replace(/\/$/, ''),
+    resourceServer: get('api').replace(/\/$/, ''),
+    clientId:       get('client-id'),
+    redirectUri:    get('redirect'),
+    ticketFilter:   document.getElementById(`${prefix}-filter`)?.value || 'mine',
+    actionTypeId:   get('action-type') || '2',
+  };
+
+  if (!cfg.authServer || !cfg.resourceServer || !cfg.clientId) {
+    showToast('Auth Server URL, Resource Server URL and Client ID are required', 'warning');
+    return null;
+  }
+  if (!cfg.redirectUri) {
+    showToast('Redirect URI is required', 'warning');
+    return null;
+  }
+  return cfg;
+}
+
+function populateConfigForm() {
+  const c = S.config || {};
+  const setVal = (id, val) => { const el = document.getElementById(`cfg-${id}`); if (el) el.value = val || ''; };
+  setVal('tenant',      c.tenant);
+  setVal('auth',        c.authServer);
+  setVal('api',         c.resourceServer);
+  setVal('client-id',   c.clientId);
+  setVal('redirect',    c.redirectUri);
+  setVal('action-type', c.actionTypeId || '2');
+  const filterEl = document.getElementById('cfg-filter');
+  if (filterEl) filterEl.value = c.ticketFilter || 'mine';
+}
+
+function updateAuthSubtitle() {
+  const el = document.getElementById('auth-subtitle');
+  if (el && S.config?.tenant) el.textContent = `Connecting to ${S.config.tenant}`;
+}
+
+// ─────────────────────────────────────────────────────────
+// INITIALISATION
+// ─────────────────────────────────────────────────────────
+async function init() {
+  // Set version
+  const verEl = document.getElementById('app-ver');
+  if (verEl) verEl.textContent = APP_VERSION;
+
+  // Load persisted state
+  S.config    = loadConfig();
+  S.auth      = loadAuth();
+  S.activeJob = loadActiveJob();
+  S.todayLog  = loadTodayLog();
+
+  // Bind all event handlers
+  bindGlobalEvents();
+
+  // Pre-fill config redirect URI if blank
+  if (S.config && !S.config.redirectUri) {
+    S.config.redirectUri = window.location.origin + '/auth/callback';
+    saveConfig(S.config);
+  }
+
+  // Pre-fill config form redirect URI default
+  const redirectEl = document.getElementById('cfg-redirect');
+  if (redirectEl && !redirectEl.value) {
+    redirectEl.value = window.location.origin + '/auth/callback';
+  }
+
+  // Check for auth callback
+  const params = new URLSearchParams(window.location.search);
+  const code   = params.get('code');
+  const error  = params.get('error');
+
+  if (error) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    showToast('Auth error: ' + (params.get('error_description') || error), 'error');
+    showScreen(S.config ? 'auth' : 'config');
+    updateAuthSubtitle();
+    return;
+  }
+
+  if (code) {
+    if (!S.config) { showScreen('config'); return; }
+    window.history.replaceState({}, document.title, window.location.pathname);
+    await handleAuthCallback(code);
+    return;
+  }
+
+  // No code — decide which screen to show
+  if (!S.config) { showScreen('config'); return; }
+  updateAuthSubtitle();
+
+  if (!S.auth) { showScreen('auth'); return; }
+
+  // Check token validity
+  if (Date.now() >= S.auth.expires_at) {
+    if (S.auth.refresh_token) {
+      const ok = await refreshAccessToken();
+      if (!ok) { showScreen('auth'); return; }
+    } else {
+      showScreen('auth');
+      return;
+    }
+  }
+
+  await initApp();
+}
+
+async function initApp() {
+  showScreen('app');
+  updateConnectionBadge();
+
+  // Restore active job banner + timer
+  if (S.activeJob) {
+    const phase = jobPhase();
+    updateActiveJobBanner();
+    if (phase === 'traveling' || phase === 'onsite') startTimer();
+  }
+
+  // Auto-refresh token validity check
+  setInterval(() => ensureValidToken(), TOKEN_CHECK_INTERVAL_MS);
+
+  // Load tickets
+  await loadTickets();
+}
+
+// ─────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
