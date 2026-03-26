@@ -2734,6 +2734,28 @@ async function initApp() {
   if (S.tokenCheckIntervalId) clearInterval(S.tokenCheckIntervalId);
   S.tokenCheckIntervalId = setInterval(() => ensureValidToken(), TOKEN_CHECK_INTERVAL_MS);
 
+  // Auto-load Outcomes (if available) and populate selects for better UX.
+  try {
+    if (S.config) {
+      const list = await fetchOutcomes().catch(() => null);
+      if (Array.isArray(list) && list.length) {
+        populateOutcomeSelect('cfg', list);
+        populateOutcomeSelect('set', list);
+        if (!S.config.actionOutcomeId) {
+          const first = list[0];
+          const id = first?.id ?? first?.Id ?? first?.OutcomeId ?? first?.outcome_id ?? first?.value ?? first?.key ?? (typeof first === 'object' ? (first.id ?? Object.values(first)[0]) : first);
+          if (id) {
+            S.config.actionOutcomeId = String(id);
+            saveConfig(S.config);
+            populateConfigForm();
+            populateSettingsForm();
+            showToast('Auto-selected default Outcome', 'info');
+          }
+        }
+      }
+    }
+  } catch (e) { console.warn('Auto-load outcomes failed:', e); }
+
   // Load tickets
   await loadTickets();
 }
