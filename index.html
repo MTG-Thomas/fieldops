@@ -2896,26 +2896,89 @@ function populateOutcomeSelect(prefix, list) {
 }
 
 async function fetchActionTypes() {
-  const candidates = ['/ActionType','/ActionTypes','/ActionType/List','/ActionTypes/List','/ActionType/GetList','/ActionTypes/GetAll'];
+  // Broaden candidate endpoints (include common /api and lowercase variations)
+  const primary = ['/ActionType','/ActionTypes','/ActionType/List','/ActionTypes/List','/ActionType/GetList','/ActionTypes/GetAll'];
+  const extras = ['/api/ActionType','/api/ActionTypes','/api/v1/ActionTypes','/api/v1/ActionType','/actiontypes','/actiontype','/ActionTypes/All','/ActionTypes/AllActionTypes','/actiontypes/list','/api/actiontypes','/api/action-type','/action-type'];
+  const candidates = [...primary, ...extras];
+
+  const attempts = [];
   for (const p of candidates) {
     try {
       const res = await apiRequest(p);
+      attempts.push({ endpoint: p, ok: true, result: res });
       if (!res) continue;
-      if (Array.isArray(res) && res.length) return res;
-      if (Array.isArray(res.actionTypes) && res.actionTypes.length) return res.actionTypes;
-      if (Array.isArray(res.Items) && res.Items.length) return res.Items;
-      if (Array.isArray(res.items) && res.items.length) return res.items;
-      if (Array.isArray(res.data) && res.data.length) return res.data;
+      if (Array.isArray(res) && res.length) { S.actionTypeDiscoveryAttempts = attempts; return res; }
+      if (Array.isArray(res.actionTypes) && res.actionTypes.length) { S.actionTypeDiscoveryAttempts = attempts; return res.actionTypes; }
+      if (Array.isArray(res.Items) && res.Items.length) { S.actionTypeDiscoveryAttempts = attempts; return res.Items; }
+      if (Array.isArray(res.items) && res.items.length) { S.actionTypeDiscoveryAttempts = attempts; return res.items; }
+      if (Array.isArray(res.data) && res.data.length) { S.actionTypeDiscoveryAttempts = attempts; return res.data; }
       const vals = Object.values(res).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
       for (const v of vals) {
-        if (Array.isArray(v) && v.length) return v;
+        if (Array.isArray(v) && v.length) { S.actionTypeDiscoveryAttempts = attempts; return v; }
       }
       const mapped = Object.entries(res).filter(([k,v]) => v && (v.id || v.ActionTypeId || v.Name || v.name || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
-      if (mapped.length) return mapped;
+      if (mapped.length) { S.actionTypeDiscoveryAttempts = attempts; return mapped; }
     } catch (e) {
-      // ignore and try next
+      attempts.push({ endpoint: p, ok: false, error: String(e && e.message ? e.message : e) });
+      // continue
     }
   }
+
+  // If not found, try to discover candidate paths from Swagger/OpenAPI docs
+  const swaggerCandidates = ['/swagger.json','/v2/swagger.json','/swagger/v1/swagger.json','/openapi.json','/api/openapi.json','/api/swagger.json','/swagger','/docs','/api/docs','/api/help','/help'];
+  for (const s of swaggerCandidates) {
+    try {
+      const res = await apiRequest(s, { headers: { Accept: 'application/json' } });
+      attempts.push({ endpoint: s, ok: true, result: res });
+      let obj = res;
+      if (typeof res === 'string') {
+        try { obj = JSON.parse(res); } catch (_) { obj = null; }
+      }
+      const paths = obj && obj.paths ? Object.keys(obj.paths) : [];
+      if (paths && paths.length) {
+        const matched = paths.filter(pth => /actiontype/i.test(pth) || /actiontypes/i.test(pth) || /action/i.test(pth));
+        for (const mp of matched) {
+          try {
+            const res2 = await apiRequest(mp);
+            attempts.push({ endpoint: mp, ok: true, result: res2 });
+            if (!res2) continue;
+            if (Array.isArray(res2) && res2.length) { S.actionTypeDiscoveryAttempts = attempts; return res2; }
+            const vals2 = Object.values(res2).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
+            for (const v of vals2) if (Array.isArray(v) && v.length) { S.actionTypeDiscoveryAttempts = attempts; return v; }
+            const mapped2 = Object.entries(res2).filter(([k,v]) => v && (v.id || v.ActionTypeId || v.Name || v.name || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
+            if (mapped2.length) { S.actionTypeDiscoveryAttempts = attempts; return mapped2; }
+          } catch (e) {
+            attempts.push({ endpoint: mp, ok: false, error: String(e && e.message ? e.message : e) });
+          }
+        }
+      } else {
+        // Fallback: search response JSON for path-like strings containing 'action'
+        const txt = JSON.stringify(res || '');
+        const re = /"(\/[^\"]*action[^\"]*)"/gi;
+        let m;
+        const found = new Set();
+        while ((m = re.exec(txt)) !== null) found.add(m[1]);
+        for (const mp of found) {
+          try {
+            const res2 = await apiRequest(mp);
+            attempts.push({ endpoint: mp, ok: true, result: res2 });
+            if (!res2) continue;
+            if (Array.isArray(res2) && res2.length) { S.actionTypeDiscoveryAttempts = attempts; return res2; }
+            const vals2 = Object.values(res2).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
+            for (const v of vals2) if (Array.isArray(v) && v.length) { S.actionTypeDiscoveryAttempts = attempts; return v; }
+            const mapped2 = Object.entries(res2).filter(([k,v]) => v && (v.id || v.ActionTypeId || v.Name || v.name || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
+            if (mapped2.length) { S.actionTypeDiscoveryAttempts = attempts; return mapped2; }
+          } catch (e) {
+            attempts.push({ endpoint: mp, ok: false, error: String(e && e.message ? e.message : e) });
+          }
+        }
+      }
+    } catch (e) {
+      attempts.push({ endpoint: s, ok: false, error: String(e && e.message ? e.message : e) });
+    }
+  }
+
+  S.actionTypeDiscoveryAttempts = attempts;
   throw new Error('No action types endpoint returned a list');
 }
 
@@ -2935,7 +2998,25 @@ async function fetchPermittedActionTypes(ticketId) {
     `/Tickets/${ticketId}/AvailableActionTypes`,
     `/ActionTypes?ticketId=${ticketId}`,
     `/ActionTypes/ForTicket/${ticketId}`,
-    `/ActionType/ForTicket/${ticketId}`
+    `/ActionType/ForTicket/${ticketId}`,
+
+    // Try common /api/ prefixes and other variants
+    `/api/Ticket/${ticketId}/ActionTypes`,
+    `/api/Tickets/${ticketId}/ActionTypes`,
+    `/api/Ticket/${ticketId}/ActionType`,
+    `/api/Tickets/${ticketId}/ActionType`,
+    `/api/Ticket/${ticketId}/AllowedActionTypes`,
+    `/api/Tickets/${ticketId}/AllowedActionTypes`,
+    `/api/Ticket/${ticketId}/AvailableActionTypes`,
+    `/api/Tickets/${ticketId}/AvailableActionTypes`,
+    `/api/ActionTypes?ticketId=${ticketId}`,
+    `/api/ActionTypes/ForTicket/${ticketId}`,
+    `/api/ActionType/ForTicket/${ticketId}`,
+
+    // Additional guesses
+    `/Api/Ticket/${ticketId}/ActionTypes`,
+    `/rest/Ticket/${ticketId}/ActionTypes`,
+    `/Service.svc/Ticket/${ticketId}/ActionTypes`
   ];
 
   function filterAllowed(list) {
