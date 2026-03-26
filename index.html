@@ -1564,7 +1564,7 @@ async function loadSiteDetail(siteId) {
 }
 
 async function postTimeEntry(entry) {
-  return apiRequest('/Action', {
+  return apiRequest('/Actions', {
     method: 'POST',
     body: JSON.stringify([{
       ticket_id:     entry.ticketId,
