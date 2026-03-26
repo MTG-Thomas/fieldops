@@ -1509,9 +1509,25 @@ async function apiRequest(path, options = {}) {
     throw new Error('Session expired — please sign in again');
   }
 
-  if (!resp.ok) throw new Error(`API error ${resp.status}: ${resp.statusText}`);
+  if (!resp.ok) {
+    // Include response body where possible to aid debugging (may be JSON or text)
+    let bodyText = '';
+    try {
+      bodyText = await resp.text();
+      const trimmed = (bodyText || '').trim();
+      if (trimmed && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        try { bodyText = JSON.stringify(JSON.parse(trimmed)); } catch (e) { /* leave raw */ }
+      }
+    } catch (e) {
+      bodyText = '<unable to read response body>';
+    }
+    throw new Error(`API error ${resp.status}: ${resp.statusText}${bodyText ? ' — ' + bodyText : ''}`);
+  }
+
   if (resp.status === 204) return null;
-  return resp.json();
+  const contentType = resp.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return resp.json();
+  return resp.text();
 }
 
 async function loadTickets() {
