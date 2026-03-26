@@ -2236,7 +2236,28 @@ async function postTimeFromForm(ticket) {
             showToast(`Found ${permitted.length} permitted action types`, 'info');
           }
         } else {
-          showToast('Could not discover permitted Action Types for this ticket', 'warning');
+          showToast('Could not discover permitted Action Types for this ticket — showing diagnostics in Settings', 'warning');
+          const attempts = S.actionTypeDiscoveryAttempts || [];
+          let html = '<h2 class="sheet-title">Action Type Discovery Diagnostics</h2>';
+          if (!attempts.length) {
+            html += '<p>No endpoints returned usable data. Try "Load action types" in Settings or ask your HaloPSA admin to check API permissions.</p>';
+          } else {
+            html += '<div style="font-size:13px;max-height:360px;overflow:auto;margin-top:8px">';
+            for (const a of attempts) {
+              html += `<div style="margin-bottom:10px"><div style="font-weight:600">${esc(a.endpoint)}</div>`;
+              if (a.ok) {
+                const txt = esc(JSON.stringify(a.result, null, 2));
+                html += `<pre style="white-space:pre-wrap;background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:6px">${txt.substring(0,2000)}</pre>`;
+              } else {
+                html += `<div style="color:var(--danger)">Error: ${esc(a.error)}</div>`;
+              }
+              html += '</div>';
+            }
+            html += '</div>';
+          }
+          document.getElementById('sheet-body').innerHTML = html + '<button id="btn-close-diagnostics" class="btn btn-ghost btn-full mt-8">Close</button>';
+          document.getElementById('btn-close-diagnostics')?.addEventListener('click', closeSheet);
+          openSheet();
         }
       } catch (e) {
         console.error('Could not load permitted action types:', e);
@@ -2901,6 +2922,7 @@ async function fetchActionTypes() {
 // Try to discover which Action Types are permitted for a specific ticket.
 // Tries several candidate endpoints and normalizes responses, then attempts
 // to filter to items that explicitly indicate permission where possible.
+// Collects diagnostic attempts into S.actionTypeDiscoveryAttempts to aid debugging.
 async function fetchPermittedActionTypes(ticketId) {
   const candidates = [
     `/Ticket/${ticketId}/ActionTypes`,
@@ -2935,31 +2957,39 @@ async function fetchPermittedActionTypes(ticketId) {
     return filtered.length ? filtered : list;
   }
 
+  const attempts = [];
   for (const p of candidates) {
     try {
       const res = await apiRequest(p);
+      attempts.push({ endpoint: p, ok: true, result: res });
       if (!res) continue;
-      if (Array.isArray(res) && res.length) return filterAllowed(res);
-      if (Array.isArray(res.actionTypes) && res.actionTypes.length) return filterAllowed(res.actionTypes);
-      if (Array.isArray(res.Items) && res.Items.length) return filterAllowed(res.Items);
-      if (Array.isArray(res.items) && res.items.length) return filterAllowed(res.items);
-      if (Array.isArray(res.data) && res.data.length) return filterAllowed(res.data);
+      if (Array.isArray(res) && res.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(res); }
+      if (Array.isArray(res.actionTypes) && res.actionTypes.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(res.actionTypes); }
+      if (Array.isArray(res.Items) && res.Items.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(res.Items); }
+      if (Array.isArray(res.items) && res.items.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(res.items); }
+      if (Array.isArray(res.data) && res.data.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(res.data); }
       const vals = Object.values(res).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
       for (const v of vals) {
-        if (Array.isArray(v) && v.length) return filterAllowed(v);
+        if (Array.isArray(v) && v.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(v); }
       }
       const mapped = Object.entries(res).filter(([k,v]) => v && (v.id || v.ActionTypeId || v.Name || v.name || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
-      if (mapped.length) return filterAllowed(mapped);
+      if (mapped.length) { S.actionTypeDiscoveryAttempts = attempts; return filterAllowed(mapped); }
     } catch (e) {
-      // ignore and try next
+      attempts.push({ endpoint: p, ok: false, error: String(e && e.message ? e.message : e) });
+      // continue and try next
     }
   }
 
   try {
     const all = await fetchActionTypes();
+    attempts.push({ endpoint: 'fallback:/ActionTypes', ok: true, result: all });
+    S.actionTypeDiscoveryAttempts = attempts;
     return filterAllowed(all || []);
-  } catch (_) { }
+  } catch (e) {
+    attempts.push({ endpoint: 'fallback:/ActionTypes', ok: false, error: String(e && e.message ? e.message : e) });
+  }
 
+  S.actionTypeDiscoveryAttempts = attempts;
   return [];
 }
 
