@@ -70,7 +70,11 @@
         </div>
         <div class="form-group">
           <label class="lbl" for="cfg-action-outcome">Default Outcome ID (optional)</label>
-          <input type="number" id="cfg-action-outcome" class="inp" placeholder="Outcome ID" min="1">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="cfg-action-outcome" class="inp" placeholder="Outcome ID" min="1" style="flex:1">
+            <button id="btn-load-outcomes-cfg" type="button" class="btn btn-ghost" style="white-space:nowrap">Load outcomes</button>
+          </div>
+          <select id="cfg-action-outcome-select" class="inp sel mt-8" style="display:none"></select>
         </div>
         <button id="btn-save-config" class="btn btn-primary btn-full mt-8">Save &amp; Connect</button>
       </div>
@@ -201,7 +205,11 @@
             </div>
             <div class="form-group">
               <label class="lbl" for="set-action-outcome">Default Outcome ID (optional)</label>
-              <input type="number" id="set-action-outcome" class="inp" placeholder="Outcome ID" min="1">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="number" id="set-action-outcome" class="inp" placeholder="Outcome ID" min="1" style="flex:1">
+                <button id="btn-load-outcomes-set" type="button" class="btn btn-ghost" style="white-space:nowrap">Load outcomes</button>
+              </div>
+              <select id="set-action-outcome-select" class="inp sel mt-8" style="display:none"></select>
             </div>
           </div>
 
@@ -2559,6 +2567,35 @@ function bindGlobalEvents() {
   // Sheet backdrop — dismiss on tap
   document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
 
+  // Load outcomes buttons — try to fetch valid Outcomes from API and populate the select
+  document.getElementById('btn-load-outcomes-cfg')?.addEventListener('click', async () => {
+    try {
+      const list = await fetchOutcomes();
+      populateOutcomeSelect('cfg', list);
+      showToast(`Loaded ${list.length} outcomes`, 'success');
+    } catch (err) {
+      console.error('Load outcomes (cfg) error:', err);
+      showToast('Failed to load outcomes: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('btn-load-outcomes-set')?.addEventListener('click', async () => {
+    try {
+      const list = await fetchOutcomes();
+      populateOutcomeSelect('set', list);
+      showToast(`Loaded ${list.length} outcomes`, 'success');
+    } catch (err) {
+      console.error('Load outcomes (set) error:', err);
+      showToast('Failed to load outcomes: ' + err.message, 'error');
+    }
+  });
+
+  // Wire select change to update the numeric input so collectConfigForm reads correct value
+  document.getElementById('cfg-action-outcome-select')?.addEventListener('change', e => {
+    const sel = e.target; document.getElementById('cfg-action-outcome').value = sel.value || ''; });
+  document.getElementById('set-action-outcome-select')?.addEventListener('change', e => {
+    const sel = e.target; document.getElementById('set-action-outcome').value = sel.value || ''; });
+
   // Warn before leaving if photos or an active job would be lost
   window.addEventListener('beforeunload', e => {
     if (S.photos.length || S.activeJob) {
@@ -2699,6 +2736,53 @@ async function initApp() {
 
   // Load tickets
   await loadTickets();
+}
+
+// Outcomes — helper functions to fetch and present Outcome lists from HaloPSA
+async function fetchOutcomes() {
+  const candidates = ['/Outcome','/Outcomes','/Outcome/List','/Outcomes/List','/Outcome/GetList','/Outcome/GetAll'];
+  for (const p of candidates) {
+    try {
+      const res = await apiRequest(p);
+      if (!res) continue;
+      // Normalize common shapes
+      if (Array.isArray(res) && res.length) return res;
+      if (Array.isArray(res.outcomes) && res.outcomes.length) return res.outcomes;
+      if (Array.isArray(res.Items) && res.Items.length) return res.Items;
+      if (Array.isArray(res.items) && res.items.length) return res.items;
+      if (Array.isArray(res.data) && res.data.length) return res.data;
+
+      // Try to coerce object values into array
+      const vals = Object.values(res).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
+      for (const v of vals) {
+        if (Array.isArray(v) && v.length) return v;
+      }
+
+      // If res looks like a map of id->{name...}, convert
+      const mapped = Object.entries(res).filter(([k,v]) => v && (v.id || v.Name || v.name || v.text || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
+      if (mapped.length) return mapped;
+    } catch (e) {
+      // ignore and try next
+    }
+  }
+  throw new Error('No outcomes endpoint returned a list');
+}
+
+function populateOutcomeSelect(prefix, list) {
+  const sel = document.getElementById(`${prefix}-action-outcome-select`);
+  const input = document.getElementById(`${prefix}-action-outcome`);
+  if (!sel) return;
+  sel.innerHTML = '';
+  list.forEach(item => {
+    const id = item.id ?? item.Id ?? item.OutcomeId ?? item.outcome_id ?? item.value ?? item.key;
+    const name = item.name ?? item.Name ?? item.title ?? item.text ?? item.description ?? String(item);
+    const opt = document.createElement('option');
+    opt.value = String(id || '');
+    opt.textContent = `${name} (${opt.value})`;
+    sel.appendChild(opt);
+  });
+  sel.style.display = '';
+  if (input && input.value) sel.value = String(input.value);
 }
 
 // ─────────────────────────────────────────────────────────
