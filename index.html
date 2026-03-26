@@ -68,6 +68,10 @@
           <label class="lbl" for="cfg-action-type">Action Type ID</label>
           <input type="number" id="cfg-action-type" class="inp" value="2" min="1">
         </div>
+        <div class="form-group">
+          <label class="lbl" for="cfg-action-outcome">Default Outcome ID (optional)</label>
+          <input type="number" id="cfg-action-outcome" class="inp" placeholder="Outcome ID" min="1">
+        </div>
         <button id="btn-save-config" class="btn btn-primary btn-full mt-8">Save &amp; Connect</button>
       </div>
     </div>
@@ -194,6 +198,10 @@
             <div class="form-group">
               <label class="lbl" for="set-action-type">Action Type ID</label>
               <input type="number" id="set-action-type" class="inp" min="1">
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="set-action-outcome">Default Outcome ID (optional)</label>
+              <input type="number" id="set-action-outcome" class="inp" placeholder="Outcome ID" min="1">
             </div>
           </div>
 
@@ -1580,16 +1588,18 @@ async function loadSiteDetail(siteId) {
 }
 
 async function postTimeEntry(entry) {
+  const action = {
+    ticket_id:     entry.ticketId,
+    timetaken:     Math.round(entry.minutes),
+    startdatetime: entry.startDatetime,
+    note:          entry.note || '',
+    billable:      true,
+    actiontype_id: parseInt(S.config?.actionTypeId || '2', 10),
+  };
+  if (S.config?.actionOutcomeId) action.outcome_id = parseInt(S.config.actionOutcomeId, 10);
   return apiRequest('/Actions', {
     method: 'POST',
-    body: JSON.stringify([{
-      ticket_id:     entry.ticketId,
-      timetaken:     Math.round(entry.minutes),
-      startdatetime: entry.startDatetime,
-      note:          entry.note || '',
-      billable:      true,
-      actiontype_id: parseInt(S.config?.actionTypeId || '2', 10),
-    }]),
+    body: JSON.stringify([action]),
   });
 }
 
@@ -2331,6 +2341,7 @@ function populateSettingsForm() {
   setVal('set-redirect',    c.redirectUri);
   setVal('set-agent-id',    c.agentId || '');
   setVal('set-action-type', c.actionTypeId || '2');
+  setVal('set-action-outcome', c.actionOutcomeId || '');
   const filterEl = document.getElementById('set-filter');
   if (filterEl) filterEl.value = c.ticketFilter || 'mine';
 }
@@ -2568,6 +2579,7 @@ function collectConfigForm(prefix) {
     ticketFilter:   document.getElementById(`${prefix}-filter`)?.value || 'mine',
     agentId:        get('agent-id') ? parseInt(get('agent-id'), 10) : null,
     actionTypeId:   get('action-type') || '2',
+    actionOutcomeId:get('action-outcome') || '',
   };
 
   if (!cfg.authServer || !cfg.resourceServer || !cfg.clientId) {
@@ -2591,6 +2603,7 @@ function populateConfigForm() {
   setVal('redirect',    c.redirectUri);
   setVal('agent-id',    c.agentId || '37');
   setVal('action-type', c.actionTypeId || '2');
+  setVal('action-outcome', c.actionOutcomeId || '');
   const filterEl = document.getElementById('cfg-filter');
   if (filterEl) filterEl.value = c.ticketFilter || 'mine';
 }
