@@ -2217,7 +2217,31 @@ async function postTimeFromForm(ticket) {
     document.getElementById('te-note').value  = '';
   } catch (err) {
     if (String(err.message).includes('You do not have access')) {
-      showToast('Posting failed: you do not have access to this Action. Open Settings to choose a different Action Type', 'error');
+      showToast('Posting failed: you do not have access to this Action. Discovering permitted Action Types for this ticket…', 'error');
+      try {
+        const permitted = await fetchPermittedActionTypes(ticket.id);
+        if (permitted && permitted.length) {
+          populateActionTypeSelect('cfg', permitted);
+          populateActionTypeSelect('set', permitted);
+          const first = permitted[0];
+          const firstId = first?.id ?? first?.Id ?? first?.ActionTypeId ?? first?.action_type_id ?? first?.value ?? first?.key;
+          if (firstId) {
+            document.getElementById('cfg-action-type').value = String(firstId);
+            document.getElementById('set-action-type').value = String(firstId);
+            S.config = S.config || {};
+            S.config.actionTypeId = String(firstId);
+            saveConfig(S.config);
+            showToast(`Found ${permitted.length} permitted action types; selected ${firstId} in Settings`, 'info');
+          } else {
+            showToast(`Found ${permitted.length} permitted action types`, 'info');
+          }
+        } else {
+          showToast('Could not discover permitted Action Types for this ticket', 'warning');
+        }
+      } catch (e) {
+        console.error('Could not load permitted action types:', e);
+        showToast('Error discovering permitted Action Types: ' + e.message, 'error');
+      }
       switchTab('settings');
     } else {
       showToast('Failed to post: ' + err.message, 'error');
@@ -2873,6 +2897,72 @@ async function fetchActionTypes() {
   }
   throw new Error('No action types endpoint returned a list');
 }
+
+// Try to discover which Action Types are permitted for a specific ticket.
+// Tries several candidate endpoints and normalizes responses, then attempts
+// to filter to items that explicitly indicate permission where possible.
+async function fetchPermittedActionTypes(ticketId) {
+  const candidates = [
+    `/Ticket/${ticketId}/ActionTypes`,
+    `/Tickets/${ticketId}/ActionTypes`,
+    `/Ticket/${ticketId}/ActionType`,
+    `/Tickets/${ticketId}/ActionType`,
+    `/Ticket/${ticketId}/AllowedActionTypes`,
+    `/Tickets/${ticketId}/AllowedActionTypes`,
+    `/Ticket/${ticketId}/AvailableActionTypes`,
+    `/Tickets/${ticketId}/AvailableActionTypes`,
+    `/ActionTypes?ticketId=${ticketId}`,
+    `/ActionTypes/ForTicket/${ticketId}`,
+    `/ActionType/ForTicket/${ticketId}`
+  ];
+
+  function filterAllowed(list) {
+    if (!Array.isArray(list) || !list.length) return [];
+    const allowedKeys = ['allowed','isAllowed','permitted','isPermitted','available','allowedForAgent','canCreate','accessible'];
+    const filtered = list.filter(item => {
+      if (!item) return false;
+      if (typeof item === 'string' || typeof item === 'number') return true;
+      for (const k of allowedKeys) {
+        if (Object.prototype.hasOwnProperty.call(item, k)) {
+          const v = item[k];
+          if (typeof v === 'boolean') return v;
+          if (typeof v === 'number') return v !== 0;
+          if (typeof v === 'string') return v === 'true' || v === '1';
+        }
+      }
+      return true;
+    });
+    return filtered.length ? filtered : list;
+  }
+
+  for (const p of candidates) {
+    try {
+      const res = await apiRequest(p);
+      if (!res) continue;
+      if (Array.isArray(res) && res.length) return filterAllowed(res);
+      if (Array.isArray(res.actionTypes) && res.actionTypes.length) return filterAllowed(res.actionTypes);
+      if (Array.isArray(res.Items) && res.Items.length) return filterAllowed(res.Items);
+      if (Array.isArray(res.items) && res.items.length) return filterAllowed(res.items);
+      if (Array.isArray(res.data) && res.data.length) return filterAllowed(res.data);
+      const vals = Object.values(res).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
+      for (const v of vals) {
+        if (Array.isArray(v) && v.length) return filterAllowed(v);
+      }
+      const mapped = Object.entries(res).filter(([k,v]) => v && (v.id || v.ActionTypeId || v.Name || v.name || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
+      if (mapped.length) return filterAllowed(mapped);
+    } catch (e) {
+      // ignore and try next
+    }
+  }
+
+  try {
+    const all = await fetchActionTypes();
+    return filterAllowed(all || []);
+  } catch (_) { }
+
+  return [];
+}
+
 
 function populateActionTypeSelect(prefix, list) {
   const sel = document.getElementById(`${prefix}-action-type-select`);
