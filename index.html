@@ -66,7 +66,11 @@
         </div>
         <div class="form-group">
           <label class="lbl" for="cfg-action-type">Action Type ID</label>
-          <input type="number" id="cfg-action-type" class="inp" value="2" min="1">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="cfg-action-type" class="inp" value="2" min="1" style="flex:1">
+            <button id="btn-load-actiontypes-cfg" type="button" class="btn btn-ghost" style="white-space:nowrap">Load action types</button>
+          </div>
+          <select id="cfg-action-type-select" class="inp sel mt-8" style="display:none"></select>
         </div>
         <div class="form-group">
           <label class="lbl" for="cfg-action-outcome">Default Outcome ID (optional)</label>
@@ -201,7 +205,11 @@
             </div>
             <div class="form-group">
               <label class="lbl" for="set-action-type">Action Type ID</label>
-              <input type="number" id="set-action-type" class="inp" min="1">
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="number" id="set-action-type" class="inp" min="1" style="flex:1">
+                <button id="btn-load-actiontypes-set" type="button" class="btn btn-ghost" style="white-space:nowrap">Load action types</button>
+              </div>
+              <select id="set-action-type-select" class="inp sel mt-8" style="display:none"></select>
             </div>
             <div class="form-group">
               <label class="lbl" for="set-action-outcome">Default Outcome ID (optional)</label>
@@ -2208,7 +2216,12 @@ async function postTimeFromForm(ticket) {
     document.getElementById('te-end').value   = '';
     document.getElementById('te-note').value  = '';
   } catch (err) {
-    showToast('Failed to post: ' + err.message, 'error');
+    if (String(err.message).includes('You do not have access')) {
+      showToast('Posting failed: you do not have access to this Action. Open Settings to choose a different Action Type', 'error');
+      switchTab('settings');
+    } else {
+      showToast('Failed to post: ' + err.message, 'error');
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = 'Post to Halo';
@@ -2429,7 +2442,12 @@ async function submitFinishLog(job, onMins) {
     if (S.currentTicket) renderDetailBody(S.currentTicket); // refresh stale job actions + photo grid
     closeSheet();
   } catch (err) {
-    showToast('Failed to post: ' + err.message, 'error');
+    if (String(err.message).includes('You do not have access')) {
+      showToast('Posting failed: you do not have access to this Action. Open Settings to choose a different Action Type', 'error');
+      switchTab('settings');
+    } else {
+      showToast('Failed to post: ' + err.message, 'error');
+    }
     btn.disabled = false;
     btn.textContent = 'Post Time Entry';
   }
@@ -2590,11 +2608,36 @@ function bindGlobalEvents() {
     }
   });
 
+  // Load action types — try to fetch valid Action Types from API and populate the select
+  document.getElementById('btn-load-actiontypes-cfg')?.addEventListener('click', async () => {
+    try {
+      const list = await fetchActionTypes();
+      populateActionTypeSelect('cfg', list);
+      showToast(`Loaded ${list.length} action types`, 'success');
+    } catch (err) {
+      console.error('Load action types (cfg) error:', err);
+      showToast('Failed to load action types: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('btn-load-actiontypes-set')?.addEventListener('click', async () => {
+    try {
+      const list = await fetchActionTypes();
+      populateActionTypeSelect('set', list);
+      showToast(`Loaded ${list.length} action types`, 'success');
+    } catch (err) {
+      console.error('Load action types (set) error:', err);
+      showToast('Failed to load action types: ' + err.message, 'error');
+    }
+  });
+
   // Wire select change to update the numeric input so collectConfigForm reads correct value
   document.getElementById('cfg-action-outcome-select')?.addEventListener('change', e => {
     const sel = e.target; document.getElementById('cfg-action-outcome').value = sel.value || ''; });
   document.getElementById('set-action-outcome-select')?.addEventListener('change', e => {
     const sel = e.target; document.getElementById('set-action-outcome').value = sel.value || ''; });
+  document.getElementById('cfg-action-type-select')?.addEventListener('change', e => { const sel = e.target; document.getElementById('cfg-action-type').value = sel.value || ''; });
+  document.getElementById('set-action-type-select')?.addEventListener('change', e => { const sel = e.target; document.getElementById('set-action-type').value = sel.value || ''; });
 
   // Warn before leaving if photos or an active job would be lost
   window.addEventListener('beforeunload', e => {
@@ -2797,6 +2840,47 @@ function populateOutcomeSelect(prefix, list) {
   sel.innerHTML = '';
   list.forEach(item => {
     const id = item.id ?? item.Id ?? item.OutcomeId ?? item.outcome_id ?? item.value ?? item.key;
+    const name = item.name ?? item.Name ?? item.title ?? item.text ?? item.description ?? String(item);
+    const opt = document.createElement('option');
+    opt.value = String(id || '');
+    opt.textContent = `${name} (${opt.value})`;
+    sel.appendChild(opt);
+  });
+  sel.style.display = '';
+  if (input && input.value) sel.value = String(input.value);
+}
+
+async function fetchActionTypes() {
+  const candidates = ['/ActionType','/ActionTypes','/ActionType/List','/ActionTypes/List','/ActionType/GetList','/ActionTypes/GetAll'];
+  for (const p of candidates) {
+    try {
+      const res = await apiRequest(p);
+      if (!res) continue;
+      if (Array.isArray(res) && res.length) return res;
+      if (Array.isArray(res.actionTypes) && res.actionTypes.length) return res.actionTypes;
+      if (Array.isArray(res.Items) && res.Items.length) return res.Items;
+      if (Array.isArray(res.items) && res.items.length) return res.items;
+      if (Array.isArray(res.data) && res.data.length) return res.data;
+      const vals = Object.values(res).filter(v => Array.isArray(v) || (v && typeof v === 'object'));
+      for (const v of vals) {
+        if (Array.isArray(v) && v.length) return v;
+      }
+      const mapped = Object.entries(res).filter(([k,v]) => v && (v.id || v.ActionTypeId || v.Name || v.name || typeof v === 'string')).map(([k,v]) => typeof v === 'object' ? v : { id: k, name: v });
+      if (mapped.length) return mapped;
+    } catch (e) {
+      // ignore and try next
+    }
+  }
+  throw new Error('No action types endpoint returned a list');
+}
+
+function populateActionTypeSelect(prefix, list) {
+  const sel = document.getElementById(`${prefix}-action-type-select`);
+  const input = document.getElementById(`${prefix}-action-type`);
+  if (!sel) return;
+  sel.innerHTML = '';
+  list.forEach(item => {
+    const id = item.id ?? item.Id ?? item.ActionTypeId ?? item.action_type_id ?? item.value ?? item.key;
     const name = item.name ?? item.Name ?? item.title ?? item.text ?? item.description ?? String(item);
     const opt = document.createElement('option');
     opt.value = String(id || '');
