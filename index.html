@@ -235,6 +235,29 @@
           <button id="btn-save-settings" class="btn btn-primary btn-full mb-8">Save Settings</button>
           <button id="btn-reload" class="btn btn-secondary btn-full mb-8">Reload Tickets</button>
           <button id="btn-sign-out" class="btn btn-danger btn-full mb-16">Sign Out</button>
+          <div class="card mb-16">
+            <p class="card-label">Test Action Type (Danger)</p>
+            <div class="form-group">
+              <label class="lbl" for="test-ticket-id">Ticket ID to test</label>
+              <input type="number" id="test-ticket-id" class="inp" placeholder="Ticket ID" min="1">
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="test-actiontype-id">Action Type ID</label>
+              <input type="number" id="test-actiontype-id" class="inp" min="1" value="">
+              <select id="test-actiontype-select" class="inp sel mt-8" style="display:none"></select>
+            </div>
+            <div class="form-group">
+              <label class="lbl" for="test-action-outcome">Outcome ID (optional)</label>
+              <input type="number" id="test-action-outcome" class="inp" min="1" placeholder="Outcome ID">
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="btn-load-actiontypes-test" type="button" class="btn btn-ghost">Load action types</button>
+              <button id="btn-run-test-action" type="button" class="btn btn-danger">Run test POST</button>
+            </div>
+            <div id="test-action-result" style="margin-top:8px; font-size:13px; white-space:pre-wrap; max-height:180px; overflow:auto; background:#071217; padding:8px; border-radius:6px;"></div>
+            <p class="muted" style="font-size:12px;margin-top:8px"><strong>Warning:</strong> This creates a real Action in HaloPSA. Use a staging ticket if possible.</p>
+          </div>
+
           <p class="version-info">FieldOps v<span id="app-ver"></span></p>
         </div>
       </div>
@@ -2419,6 +2442,7 @@ function populateSettingsForm() {
   setVal('set-agent-id',    c.agentId || '');
   setVal('set-action-type', c.actionTypeId || '2');
   setVal('set-action-outcome', c.actionOutcomeId || '');
+  setVal('test-actiontype-id', c.actionTypeId || '');
   const filterEl = document.getElementById('set-filter');
   if (filterEl) filterEl.value = c.ticketFilter || 'mine';
   // Render manual ActionType mappings (if any)
@@ -3192,6 +3216,81 @@ document.getElementById('set-actiontype-mappings')?.addEventListener('click', e 
 // ─────────────────────────────────────────────────────────
 // BOOT
 // ─────────────────────────────────────────────────────────
+// Test Action Type helpers
+function populateTestActionTypeSelect(list) {
+  const sel = document.getElementById('test-actiontype-select');
+  const input = document.getElementById('test-actiontype-id');
+  if (!sel) return;
+  sel.innerHTML = '';
+  (list || []).forEach(item => {
+    const id = item.id ?? item.Id ?? item.ActionTypeId ?? item.action_type_id ?? item.value ?? item.key;
+    const name = item.name ?? item.Name ?? item.title ?? item.text ?? item.description ?? String(item);
+    const opt = document.createElement('option');
+    opt.value = String(id || '');
+    opt.textContent = `${name} (${opt.value})`;
+    sel.appendChild(opt);
+  });
+  try {
+    const manual = (S.config && S.config.actionTypeMap) || {};
+    for (const [mid,mname] of Object.entries(manual)) {
+      if (!Array.from(sel.options).some(o => o.value === String(mid))) {
+        const opt = document.createElement('option');
+        opt.value = String(mid);
+        opt.textContent = `${mname} (manual) (${mid})`;
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {}
+  sel.style.display = sel.options.length ? '' : 'none';
+  if (input && input.value) sel.value = String(input.value);
+}
+
+async function testActionTypePost() {
+  const ticketId = document.getElementById('test-ticket-id')?.value?.trim();
+  const actionTypeId = document.getElementById('test-actiontype-id')?.value?.trim() || S.config?.actionTypeId;
+  const outcomeId = document.getElementById('test-action-outcome')?.value?.trim();
+  if (!ticketId || !actionTypeId) { showToast('Ticket ID and Action Type ID are required', 'warning'); return; }
+  const btn = document.getElementById('btn-run-test-action');
+  btn.disabled = true;
+  const resultEl = document.getElementById('test-action-result');
+  resultEl.textContent = 'Running test POST...';
+  const action = {
+    ticket_id: parseInt(ticketId, 10),
+    timetaken: 1,
+    startdatetime: new Date().toISOString(),
+    note: 'FieldOps TEST Action (do not bill) — created by Test Action Type.',
+    billable: false,
+    actiontype_id: parseInt(actionTypeId, 10),
+  };
+  if (outcomeId) action.outcome_id = parseInt(outcomeId, 10);
+  try {
+    const resp = await apiRequest('/Actions', { method:'POST', body: JSON.stringify([action]) });
+    resultEl.textContent = 'Success:\n' + JSON.stringify(resp, null, 2);
+    showToast('Test POST succeeded', 'success');
+  } catch (err) {
+    resultEl.textContent = 'Error:\n' + (err && err.message ? err.message : String(err));
+    showToast('Test POST failed: ' + (err && err.message ? err.message : String(err)), 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Wire test UI events
+document.getElementById('btn-load-actiontypes-test')?.addEventListener('click', async () => {
+  try {
+    const list = await fetchActionTypes();
+    populateTestActionTypeSelect(list);
+    showToast(`Loaded ${list.length} action types`, 'success');
+  } catch (err) {
+    console.error('Load action types (test) error:', err);
+    showToast('Failed to load action types: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('test-actiontype-select')?.addEventListener('change', e => { const sel = e.target; document.getElementById('test-actiontype-id').value = sel.value || ''; });
+
+document.getElementById('btn-run-test-action')?.addEventListener('click', testActionTypePost);
+
 document.addEventListener('DOMContentLoaded', init);
 </script>
 
