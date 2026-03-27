@@ -57,3 +57,23 @@
 
 - `CLAUDE.md` contains Vercel-specific guidance (stateless functions, env vars for secrets, no deprecated KV/Postgres). Apply it when adding any server-side functionality.
 - `manifest.json` defines the PWA launcher metadata (name, theme color `#0f1923`, icon). Update it if the app name or theme changes.
+
+## Marketing / marketplace listing
+
+When creating marketplace or listing text, use the short blurb and meta description in README.md. Suggested copy is embedded in the README at the top (hero image + short blurb). Keep the one-line meta description ≤160 characters for search engines and marketplace cards.
+
+## Action Type discovery & troubleshooting
+
+- The app records detailed discovery attempts in the runtime state key `S.actionTypeDiscoveryAttempts`. Use Settings → Diagnostics to review which endpoints were probed and their responses.
+- Common failure modes:
+  - The HaloPSA instance does not expose a global `/ActionTypes` endpoint (vendor swagger may omit it).
+  - Per-ticket endpoints such as `/Tickets/{id}/ActionTypes` often return 404/403 when the API agent lacks permission.
+  - Field and casing differences (ActionTypeId vs actiontype_id) require normalization — the client already attempts common variants.
+
+- Admin checklist when discovery fails:
+  1. Confirm whether a listing endpoint exists on the instance (ask HaloPSA admin or inspect the instance swagger/openapi JSON). If present, enable read permission for the API user.
+  2. If no listing endpoint is available or permission cannot be granted, use the Settings → ActionType mapping UI to add manual mappings from ActionType ID → display name.
+  3. Optionally use the Test Action Type flow to attempt a safe POST and observe server errors; diagnostics surface the raw response for triage.
+
+- When filing issues, attach the vendor swagger (openapi.json / swagger.json) and a copy of `S.actionTypeDiscoveryAttempts` from the UI — these make triage much faster.
+

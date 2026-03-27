@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#0f1923" />
+      <stop offset="1" stop-color="#07232a" />
+    </linearGradient>
+    <style>
+      .title { font: 48px 'Syne', system-ui, sans-serif; fill: #00d4ff; }
+      .tag { font: 20px 'Inter', system-ui, sans-serif; fill: #cfeef6; }
+      .mono { font: 14px 'DM Mono', monospace; fill: #9fbec7; }
+    </style>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#g)" />
+  <rect x="32" y="32" width="360" height="336" rx="18" fill="#071217" opacity="0.65" />
+  <rect x="60" y="70" width="280" height="180" rx="8" fill="#071217" stroke="#073842" />
+  <circle cx="120" cy="120" r="8" fill="#00d4ff" />
+  <rect x="120" y="280" width="880" height="64" rx="8" fill="#061318" opacity="0.5" />
+  <text x="440" y="140" class="title">FieldOps</text>
+  <text x="440" y="180" class="tag">Offline-first companion PWA for HaloPSA</text>
+  <text x="440" y="220" class="mono">Fast time capture • Photos • Ticket updates</text>
+</svg>

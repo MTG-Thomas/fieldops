@@ -1,3 +1,17 @@
+![FieldOps screenshot](landing-fieldops/hero.svg)
+
+# FieldOps
+
+FieldOps is a lightweight, offline-capable Progressive Web App (PWA) that complements HaloPSA by giving field technicians a fast, focused UI for job check-ins, timers, time posting, photo capture, and ticket notes. It’s designed for service providers and MSPs that rely on mobile field work and want a friction-free companion to HaloPSA.
+
+Marketplace listing (short):
+
+> FieldOps — an offline-first companion PWA for HaloPSA. Quick time capture, photo attachments, and ticket updates for field technicians.
+
+Meta description (<=160 chars):
+
+FieldOps: offline-first companion PWA for HaloPSA. Fast time capture, photo attachments and ticket updates for field technicians.
+
 # FieldOps
 
 FieldOps is a lightweight, offline-capable Progressive Web App (PWA) that complements HaloPSA by giving field technicians a fast, focused UI for job check-ins, timers, time posting, photo capture, and ticket notes. It’s designed for service providers and MSPs that rely on mobile field work and want a friction-free companion to HaloPSA.

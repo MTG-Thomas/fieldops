@@ -221,6 +221,17 @@
             </div>
           </div>
 
+          <div class="card mb-16">
+            <p class="card-label">Manual Action Type mappings</p>
+            <div id="set-actiontype-mappings" style="margin-bottom:8px"></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="set-actiontype-mapping-id" class="inp" placeholder="Action Type ID" min="1" style="flex:1">
+              <input type="text" id="set-actiontype-mapping-name" class="inp" placeholder="Display name" style="flex:2">
+              <button id="btn-add-actiontype-mapping" type="button" class="btn btn-ghost">Add</button>
+            </div>
+            <p class="muted" style="font-size:12px;margin-top:8px">Add mappings to show friendly names when the API does not return a usable ActionTypes list.</p>
+          </div>
+
           <button id="btn-save-settings" class="btn btn-primary btn-full mb-8">Save Settings</button>
           <button id="btn-reload" class="btn btn-secondary btn-full mb-8">Reload Tickets</button>
           <button id="btn-sign-out" class="btn btn-danger btn-full mb-16">Sign Out</button>
@@ -2410,6 +2421,8 @@ function populateSettingsForm() {
   setVal('set-action-outcome', c.actionOutcomeId || '');
   const filterEl = document.getElementById('set-filter');
   if (filterEl) filterEl.value = c.ticketFilter || 'mine';
+  // Render manual ActionType mappings (if any)
+  try { renderActionTypeMappings(); } catch (e) { /* helper may not be loaded yet */ }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2601,10 +2614,14 @@ function bindGlobalEvents() {
 
   // Settings — save
   document.getElementById('btn-save-settings').addEventListener('click', () => {
-    const cfg = collectConfigForm('set');
-    if (!cfg) return;
+    const formCfg = collectConfigForm('set');
+    if (!formCfg) return;
+    // Preserve any existing advanced config (manual mappings, etc.)
+    const cfg = Object.assign({}, S.config || {}, formCfg);
+    cfg.actionTypeMap = (S.config && S.config.actionTypeMap) ? S.config.actionTypeMap : (cfg.actionTypeMap || {});
     saveConfig(cfg);
     S.config = cfg;
+    try { renderActionTypeMappings(); } catch (e) {}
     showToast('Settings saved', 'success');
     updateConnectionBadge();
   });
@@ -3080,7 +3097,7 @@ function populateActionTypeSelect(prefix, list) {
   const input = document.getElementById(`${prefix}-action-type`);
   if (!sel) return;
   sel.innerHTML = '';
-  list.forEach(item => {
+  (list || []).forEach(item => {
     const id = item.id ?? item.Id ?? item.ActionTypeId ?? item.action_type_id ?? item.value ?? item.key;
     const name = item.name ?? item.Name ?? item.title ?? item.text ?? item.description ?? String(item);
     const opt = document.createElement('option');
@@ -3088,9 +3105,89 @@ function populateActionTypeSelect(prefix, list) {
     opt.textContent = `${name} (${opt.value})`;
     sel.appendChild(opt);
   });
+
+  // Merge manual mappings from config so users can select mapped IDs when API discovery fails
+  try {
+    const manual = (S.config && S.config.actionTypeMap) || {};
+    for (const [mid, mname] of Object.entries(manual)) {
+      if (!Array.from(sel.options).some(o => o.value === String(mid))) {
+        const opt = document.createElement('option');
+        opt.value = String(mid);
+        opt.textContent = `${mname} (manual) (${mid})`;
+        opt.dataset.manual = '1';
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
   sel.style.display = '';
   if (input && input.value) sel.value = String(input.value);
 }
+
+// Manual ActionType mapping helpers
+function renderActionTypeMappings() {
+  const container = document.getElementById('set-actiontype-mappings');
+  if (!container) return;
+  container.innerHTML = '';
+  const map = (S.config && S.config.actionTypeMap) || {};
+  const entries = Object.entries(map);
+  if (!entries.length) {
+    container.innerHTML = '<div class="muted">No manual mappings configured.</div>';
+    return;
+  }
+  const list = document.createElement('div');
+  list.style.display = 'flex';
+  list.style.flexDirection = 'column';
+  list.style.gap = '6px';
+  entries.forEach(([id, name]) => {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.innerHTML = `<div style="font-size:14px">${esc(name)} <span style="opacity:0.7">(${id})</span></div><button class="btn btn-ghost btn-remove-actiontype-mapping" data-id="${esc(id)}">Remove</button>`;
+    list.appendChild(row);
+  });
+  container.appendChild(list);
+}
+
+function addActionTypeMapping(id, name) {
+  if (!id || !name) return;
+  S.config = S.config || {};
+  S.config.actionTypeMap = S.config.actionTypeMap || {};
+  S.config.actionTypeMap[String(id)] = name;
+  saveConfig(S.config);
+  renderActionTypeMappings();
+  showToast('Mapping saved', 'success');
+}
+
+function removeActionTypeMapping(id) {
+  if (!S.config || !S.config.actionTypeMap) return;
+  delete S.config.actionTypeMap[String(id)];
+  saveConfig(S.config);
+  renderActionTypeMappings();
+  showToast('Mapping removed', 'success');
+}
+
+// Wire mapping UI events (if elements exist at script run)
+document.getElementById('btn-add-actiontype-mapping')?.addEventListener('click', () => {
+  const id = document.getElementById('set-actiontype-mapping-id')?.value?.trim();
+  const name = document.getElementById('set-actiontype-mapping-name')?.value?.trim();
+  if (!id || !name) { showToast('ID and name are required', 'warning'); return; }
+  addActionTypeMapping(id, name);
+  document.getElementById('set-actiontype-mapping-id').value = '';
+  document.getElementById('set-actiontype-mapping-name').value = '';
+});
+
+document.getElementById('set-actiontype-mappings')?.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-remove-actiontype-mapping');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (!id) return;
+  if (!confirm('Remove mapping for Action Type ID ' + id + '?')) return;
+  removeActionTypeMapping(id);
+});
 
 // ─────────────────────────────────────────────────────────
 // BOOT
