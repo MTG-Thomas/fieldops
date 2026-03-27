@@ -187,6 +187,10 @@
               <label class="lbl" for="set-redirect">Redirect URI</label>
               <input type="url" id="set-redirect" class="inp" autocomplete="off" spellcheck="false">
             </div>
+            <div class="form-group">
+              <label class="lbl" for="set-scope">OAuth scope(s)</label>
+              <input type="text" id="set-scope" class="inp" placeholder="space-separated scopes (e.g. offline_access openid all)" autocomplete="off" spellcheck="false">
+            </div>
           </div>
 
           <div class="card mb-16">
@@ -1380,7 +1384,7 @@ async function startAuth() {
     response_type:         'code',
     client_id:             cfg.clientId,
     redirect_uri:          cfg.redirectUri,
-    scope:                 'all',
+    scope:                 cfg.scope || 'all',
     code_challenge:        challenge,
     code_challenge_method: 'S256',
   });
@@ -2439,6 +2443,7 @@ function populateSettingsForm() {
   setVal('set-api',         c.resourceServer);
   setVal('set-client-id',   c.clientId);
   setVal('set-redirect',    c.redirectUri);
+  setVal('set-scope',       c.scope || 'all');
   setVal('set-agent-id',    c.agentId || '');
   setVal('set-action-type', c.actionTypeId || '2');
   setVal('set-action-outcome', c.actionOutcomeId || '');
@@ -2742,6 +2747,7 @@ function collectConfigForm(prefix) {
     resourceServer: get('api').replace(/\/$/, ''),
     clientId:       get('client-id'),
     redirectUri:    get('redirect'),
+    scope:           get('scope') || 'all',
     ticketFilter:   document.getElementById(`${prefix}-filter`)?.value || 'mine',
     agentId:        get('agent-id') ? parseInt(get('agent-id'), 10) : null,
     actionTypeId:   get('action-type') || '2',
