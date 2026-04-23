@@ -333,7 +333,7 @@ function App() {
             Signed in as <strong>{session.user.displayName}</strong>. Your Halo refresh token stays server-side in
             Azure.
           </p>
-          <button className="primary-btn" onClick={() => void startHaloConnect()}>
+          <button className="primary-btn" onClick={startHaloConnect}>
             Connect Halo
           </button>
           <p className="muted">Option 2 viability is still under evaluation. v1 uses the secure per-user Halo OAuth flow.</p>
