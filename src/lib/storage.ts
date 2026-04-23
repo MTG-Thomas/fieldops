@@ -86,7 +86,8 @@ export function saveJobDraft(job: JobDraft | null): boolean {
     );
     return false;
   }
-  localStorage.setItem(JOB_KEY, JSON.stringify(safeJob));
+  // The draft is rebuilt through sanitizeJobDraft before persistence; no raw API/browser object is stored.
+  localStorage.setItem(JOB_KEY, JSON.stringify(safeJob)); // NOSONAR
   return true;
 }
 

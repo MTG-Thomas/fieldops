@@ -72,6 +72,10 @@ function createDraft(ticket: TicketSummary): JobDraft {
   };
 }
 
+function removeToastById(items: Toast[], id: string): Toast[] {
+  return items.filter((item) => item.id !== id);
+}
+
 function App() {
   const [session, setSession] = useState<FieldOpsSession | null>(null);
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
@@ -130,9 +134,7 @@ function App() {
   function pushToast(text: string, tone: Toast["tone"] = "info"): void {
     const toast = { id: createId(), text, tone };
     setToasts((current) => [...current, toast]);
-    window.setTimeout(() => {
-      setToasts((current) => current.filter((item) => item.id !== toast.id));
-    }, 2600);
+    window.setTimeout(() => setToasts((current) => removeToastById(current, toast.id)), 2600);
   }
 
   async function flushQueue(): Promise<void> {
