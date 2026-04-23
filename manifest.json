@@ -1,7 +1,7 @@
 {
   "name": "FieldOps",
   "short_name": "FieldOps",
-  "description": "HaloPSA Field Tech PWA — GPS check-in, time tracking and ticket management for MSP field technicians.",
+  "description": "Azure-native FieldOps for HaloPSA with Entra auth and a secure Functions backend.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f1923",

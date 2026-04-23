@@ -1,0 +1,16 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "FIELDOPS_USE_MOCK_DATA": "true",
+    "FIELDOPS_MOCK_USER_ID": "user-123",
+    "FIELDOPS_MOCK_USER_NAME": "Thomas Bray",
+    "FIELDOPS_MOCK_USER_EMAIL": "thomas@example.com",
+    "FIELDOPS_ENCRYPTION_KEY": "ZmllbGRvcHMtZGV2LWVuY3J5cHRpb24ta2V5LW11c3QtYmUtMzItYnl0ZXMhIQ==",
+    "HALO_AUTH_URL": "https://yourtenant.halopsa.com/auth",
+    "HALO_API_URL": "https://yourtenant.halopsa.com/api",
+    "HALO_CLIENT_ID": "your-halo-client-id",
+    "HALO_REDIRECT_URI": "http://localhost:4280/api/halo/connect/callback"
+  }
+}
