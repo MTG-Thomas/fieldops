@@ -1,8 +1,28 @@
 const { app } = require("@azure/functions");
 const { getUser } = require("./auth");
+const { getConfig } = require("./config");
 const { json, handleError } = require("./http");
 const halo = require("./halo-client");
 const service = require("./service");
+
+function assertSafeAuthorizeUrl(authorizeUrl) {
+  if (typeof authorizeUrl !== "string" || !authorizeUrl) {
+    throw new Error("Failed to generate Halo authorization URL");
+  }
+  if (authorizeUrl.startsWith("/") && !authorizeUrl.startsWith("//")) {
+    return;
+  }
+  try {
+    const parsed = new URL(authorizeUrl);
+    const expectedHost = new URL(getConfig().haloAuthUrl).hostname;
+    if (parsed.protocol === "https:" && parsed.hostname === expectedHost) {
+      return;
+    }
+  } catch {
+    // Fall through to the common error below.
+  }
+  throw new Error("Failed to generate Halo authorization URL");
+}
 
 app.http("session", {
   methods: ["GET"],
@@ -19,13 +39,21 @@ app.http("session", {
 });
 
 app.http("halo-connect-start", {
-  methods: ["POST"],
+  methods: ["GET", "POST"],
   authLevel: "anonymous",
   route: "halo/connect/start",
   handler: async (request) => {
     try {
       const user = getUser(request);
-      return json(await service.startConnect(user));
+      const { authorizeUrl } = await service.startConnect(user);
+      assertSafeAuthorizeUrl(authorizeUrl);
+      if (request.method === "GET") {
+        return {
+          status: 302,
+          headers: { Location: authorizeUrl },
+        };
+      }
+      return json({ authorizeUrl });
     } catch (error) {
       return handleError(error);
     }

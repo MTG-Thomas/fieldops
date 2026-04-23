@@ -24,10 +24,10 @@ import type {
 } from "../shared/contracts";
 
 type Tab = "dashboard" | "activity" | "settings";
-type Toast = { id: number; text: string; tone: "info" | "success" | "error" | "warning" };
+type Toast = { id: string; text: string; tone: "info" | "success" | "error" | "warning" };
 
 function createId(): string {
-  return Math.random().toString(36).slice(2, 10);
+  return crypto.randomUUID();
 }
 
 function formatTime(iso?: string): string {
@@ -128,7 +128,7 @@ function App() {
   }
 
   function pushToast(text: string, tone: Toast["tone"] = "info"): void {
-    const toast = { id: Date.now() + Math.floor(Math.random() * 1000), text, tone };
+    const toast = { id: createId(), text, tone };
     setToasts((current) => [...current, toast]);
     window.setTimeout(() => {
       setToasts((current) => current.filter((item) => item.id !== toast.id));

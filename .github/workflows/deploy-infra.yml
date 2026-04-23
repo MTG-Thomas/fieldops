@@ -2,6 +2,15 @@ name: Deploy Azure Infra
 
 on:
   workflow_dispatch:
+    inputs:
+      use_mock_data:
+        description: "Set FIELDOPS_USE_MOCK_DATA for the deployed app."
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   deploy:
@@ -15,10 +24,12 @@ jobs:
       DEPLOYMENT_NAME: fieldops-infra
 
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to actions/checkout v4 for GitHub Actions supply-chain hygiene.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Azure login
-        uses: azure/login@v2
+        # Pinned to azure/login v2.3.0 for GitHub Actions supply-chain hygiene.
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ env.AZURE_TENANT_ID }}
@@ -38,27 +49,49 @@ jobs:
       - name: Read deployment outputs
         id: deploy_outputs
         run: |
-          STORAGE_CONNECTION_STRING=$(az deployment group show \
+          STORAGE_ACCOUNT_NAME=$(az deployment group show \
             --name "$DEPLOYMENT_NAME" \
             --resource-group "$RESOURCE_GROUP" \
-            --query properties.outputs.storageConnectionString.value -o tsv)
+            --query properties.outputs.storageAccountName.value -o tsv)
           APPINSIGHTS_CONNECTION_STRING=$(az deployment group show \
             --name "$DEPLOYMENT_NAME" \
             --resource-group "$RESOURCE_GROUP" \
             --query properties.outputs.appInsightsConnectionString.value -o tsv)
-          echo "storage_connection_string=$STORAGE_CONNECTION_STRING" >> "$GITHUB_OUTPUT"
+          if [ -z "$STORAGE_ACCOUNT_NAME" ]; then
+            echo "Missing storage account deployment output" >&2
+            exit 1
+          fi
+          if [ -z "$APPINSIGHTS_CONNECTION_STRING" ]; then
+            echo "Missing Application Insights deployment output" >&2
+            exit 1
+          fi
+          echo "storage_account_name=$STORAGE_ACCOUNT_NAME" >> "$GITHUB_OUTPUT"
           echo "appinsights_connection_string=$APPINSIGHTS_CONNECTION_STRING" >> "$GITHUB_OUTPUT"
 
       - name: Configure SWA app settings
-        run: >
-          az staticwebapp appsettings set
-          --name fieldops
-          --resource-group "$RESOURCE_GROUP"
-          --setting-names
-          FIELDOPS_STORAGE_CONNECTION_STRING="${{ steps.deploy_outputs.outputs.storage_connection_string }}"
-          FIELDOPS_ENCRYPTION_KEY="${{ secrets.FIELDOPS_ENCRYPTION_KEY }}"
-          FIELDOPS_USE_MOCK_DATA=true
-          ENTRA_CLIENT_ID="${{ secrets.ENTRA_CLIENT_ID }}"
-          ENTRA_CLIENT_SECRET="${{ secrets.ENTRA_CLIENT_SECRET }}"
-          HALO_CLIENT_SECRET="${{ secrets.HALO_CLIENT_SECRET }}"
-          APPLICATIONINSIGHTS_CONNECTION_STRING="${{ steps.deploy_outputs.outputs.appinsights_connection_string }}"
+        env:
+          STORAGE_ACCOUNT_NAME: ${{ steps.deploy_outputs.outputs.storage_account_name }}
+          FIELDOPS_ENCRYPTION_KEY: ${{ secrets.FIELDOPS_ENCRYPTION_KEY }}
+          ENTRA_CLIENT_ID: ${{ secrets.ENTRA_CLIENT_ID }}
+          ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
+          HALO_CLIENT_SECRET: ${{ secrets.HALO_CLIENT_SECRET }}
+          APPLICATIONINSIGHTS_CONNECTION_STRING: ${{ steps.deploy_outputs.outputs.appinsights_connection_string }}
+          FIELDOPS_USE_MOCK_DATA: ${{ inputs.use_mock_data }}
+        run: |
+          fieldops_storage_connection_string="$(az storage account show-connection-string \
+            --name "$STORAGE_ACCOUNT_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query connectionString -o tsv)"
+          echo "::add-mask::$fieldops_storage_connection_string"
+
+          az staticwebapp appsettings set \
+            --name fieldops \
+            --resource-group "$RESOURCE_GROUP" \
+            --setting-names \
+            FIELDOPS_STORAGE_CONNECTION_STRING="$fieldops_storage_connection_string" \
+            FIELDOPS_ENCRYPTION_KEY="$FIELDOPS_ENCRYPTION_KEY" \
+            FIELDOPS_USE_MOCK_DATA="$FIELDOPS_USE_MOCK_DATA" \
+            ENTRA_CLIENT_ID="$ENTRA_CLIENT_ID" \
+            ENTRA_CLIENT_SECRET="$ENTRA_CLIENT_SECRET" \
+            HALO_CLIENT_SECRET="$HALO_CLIENT_SECRET" \
+            APPLICATIONINSIGHTS_CONNECTION_STRING="$APPLICATIONINSIGHTS_CONNECTION_STRING"

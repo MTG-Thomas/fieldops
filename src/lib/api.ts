@@ -21,10 +21,8 @@ export async function getSession(): Promise<FieldOpsSession> {
   return parseResponse<FieldOpsSession>(await fetch("/api/session"));
 }
 
-export async function startHaloConnect(): Promise<void> {
-  const response = await fetch("/api/halo/connect/start", { method: "POST" });
-  const data = await parseResponse<{ authorizeUrl: string }>(response);
-  window.location.assign(data.authorizeUrl);
+export function startHaloConnect(): void {
+  window.location.assign("/api/halo/connect/start");
 }
 
 export async function disconnectHalo(): Promise<void> {
