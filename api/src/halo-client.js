@@ -64,13 +64,19 @@ async function refreshAccessToken(refreshToken) {
 
 async function fetchWithBearer(path, accessToken, options) {
   const config = getConfig();
+  const headers = options?.headers
+    ? {
+        Authorization: `Bearer ${accessToken}`,
+        ...(options?.body ? { "Content-Type": "application/json" } : undefined),
+        ...options.headers,
+      }
+    : {
+        Authorization: `Bearer ${accessToken}`,
+        ...(options?.body ? { "Content-Type": "application/json" } : undefined),
+      };
   const response = await fetch(`${config.haloApiUrl}${path}`, {
     ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(options?.body ? { "Content-Type": "application/json" } : {}),
-      ...(options?.headers || {}),
-    },
+    headers,
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");

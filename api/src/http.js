@@ -1,11 +1,18 @@
-const json = (body, init) => ({
-  jsonBody: body,
-  status: init?.status || 200,
-  headers: {
-    "Content-Type": "application/json",
-    ...(init?.headers || {}),
-  },
-});
+const json = (body, init) => {
+  const headers = init?.headers
+    ? {
+        "Content-Type": "application/json",
+        ...init.headers,
+      }
+    : {
+        "Content-Type": "application/json",
+      };
+  return {
+    jsonBody: body,
+    status: init?.status || 200,
+    headers,
+  };
+};
 
 function handleError(error) {
   return json(
