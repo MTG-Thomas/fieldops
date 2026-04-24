@@ -1,4 +1,7 @@
 .vercel
 node_modules/
+api/node_modules/
+api/local.settings.json
+dist/
 playwright-report/
 test-results/

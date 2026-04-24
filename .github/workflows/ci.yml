@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Playwright Tests
+  build-and-test:
+    name: Build and Playwright Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -20,8 +20,17 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm ci
+
+      - name: Install API dependencies
+        run: npm --prefix api ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Validate Functions syntax
+        run: for f in api/src/*.js; do node --check "$f"; done
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
