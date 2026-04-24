@@ -22,6 +22,7 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     supportsHttpsTrafficOnly: true
     encryption: {
       keySource: 'Microsoft.Storage'
+      requireInfrastructureEncryption: true
       services: {
         blob: {
           enabled: true
@@ -54,6 +55,9 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
 resource staticSite 'Microsoft.Web/staticSites@2023-12-01' = {
   name: appName
   location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: staticSiteSku
     tier: staticSiteSku
