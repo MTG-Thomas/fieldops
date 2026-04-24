@@ -22,7 +22,7 @@ export async function getSession(): Promise<FieldOpsSession> {
 }
 
 export function startHaloConnect(): void {
-  window.location.assign("/api/halo/connect/start");
+  globalThis.location.assign("/api/halo/connect/start");
 }
 
 export async function disconnectHalo(): Promise<void> {

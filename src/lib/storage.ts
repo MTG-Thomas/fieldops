@@ -20,6 +20,10 @@ function cleanIso(value: unknown): string | undefined {
   return Number.isNaN(parsed) ? undefined : new Date(parsed).toISOString();
 }
 
+function rejectWithDomError(reject: (reason?: Error) => void, error: DOMException | null, fallback: string): void {
+  reject(error ?? new Error(fallback));
+}
+
 function sanitizeJobDraft(value: unknown): JobDraft | null {
   if (!isObject(value) || typeof value.ticketId !== "number" || !Number.isFinite(value.ticketId)) {
     return null;
@@ -94,7 +98,7 @@ export function saveJobDraft(job: JobDraft | null): boolean {
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => rejectWithDomError(reject, request.error, "Failed to open sync queue");
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -111,7 +115,7 @@ export async function enqueueSyncItem(item: SyncBatchItem): Promise<void> {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).put(item);
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => rejectWithDomError(reject, tx.error, "Failed to enqueue sync item");
   });
 }
 
@@ -121,7 +125,7 @@ export async function getQueuedItems(): Promise<SyncBatchItem[]> {
     const tx = db.transaction(STORE_NAME, "readonly");
     const req = tx.objectStore(STORE_NAME).getAll();
     req.onsuccess = () => resolve((req.result as SyncBatchItem[]) ?? []);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => rejectWithDomError(reject, req.error, "Failed to read sync queue");
   });
 }
 
@@ -132,6 +136,6 @@ export async function deleteQueuedItems(ids: string[]): Promise<void> {
     const store = tx.objectStore(STORE_NAME);
     ids.forEach((id) => store.delete(id));
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => rejectWithDomError(reject, tx.error, "Failed to delete queued sync items");
   });
 }

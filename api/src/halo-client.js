@@ -62,14 +62,14 @@ async function refreshAccessToken(refreshToken) {
   return response.json();
 }
 
-async function fetchWithBearer(path, accessToken, options = {}) {
+async function fetchWithBearer(path, accessToken, options) {
   const config = getConfig();
   const response = await fetch(`${config.haloApiUrl}${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers || {}),
+      ...(options?.body ? { "Content-Type": "application/json" } : {}),
+      ...(options?.headers || {}),
     },
   });
   if (!response.ok) {
@@ -116,7 +116,7 @@ async function getTicketDetail(ticketId, accessToken) {
 async function getCachedLookup(kind, loader) {
   const config = getConfig();
   const cached = await getLookup(kind);
-  if (cached && cached.payload && cached.updatedAt) {
+  if (cached?.payload && cached.updatedAt) {
     const ageMs = Date.now() - Date.parse(cached.updatedAt);
     if (ageMs < config.outcomesCacheMinutes * 60 * 1000) {
       return JSON.parse(cached.payload);

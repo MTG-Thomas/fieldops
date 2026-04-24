@@ -1,9 +1,9 @@
-const json = (body, init = {}) => ({
+const json = (body, init) => ({
   jsonBody: body,
-  status: init.status || 200,
+  status: init?.status || 200,
   headers: {
     "Content-Type": "application/json",
-    ...(init.headers || {}),
+    ...(init?.headers || {}),
   },
 });
 

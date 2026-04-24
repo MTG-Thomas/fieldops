@@ -81,13 +81,13 @@ select {
 
 .ghost-btn,
 .tab {
-  background: rgba(255, 255, 255, 0.03);
-  color: #e8eef4;
+  background: #213243;
+  color: #ffffff;
   border-color: rgba(103, 132, 161, 0.25);
 }
 
 .danger-btn {
-  background: #ff5d6c;
+  background: #b91c2a;
   color: #fff;
 }
 

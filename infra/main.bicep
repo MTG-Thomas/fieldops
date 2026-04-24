@@ -9,13 +9,13 @@ var storageName = '${substring(normalizedAppName, 0, min(length(normalizedAppNam
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageName
   location: location
-  identity: {
-    type: 'SystemAssigned'
-  }
   sku: {
     name: storageSku
   }
   kind: 'StorageV2'
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'

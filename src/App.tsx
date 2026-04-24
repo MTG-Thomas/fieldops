@@ -107,8 +107,8 @@ function App() {
     const handleOnline = () => {
       void flushQueue();
     };
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
+    globalThis.addEventListener("online", handleOnline);
+    return () => globalThis.removeEventListener("online", handleOnline);
   }, []);
 
   async function hydrate(): Promise<void> {
@@ -134,7 +134,7 @@ function App() {
   function pushToast(text: string, tone: Toast["tone"] = "info"): void {
     const toast = { id: createId(), text, tone };
     setToasts((current) => [...current, toast]);
-    window.setTimeout(() => setToasts((current) => removeToastById(current, toast.id)), 2600);
+    globalThis.setTimeout(() => setToasts((current) => removeToastById(current, toast.id)), 2600);
   }
 
   async function flushQueue(): Promise<void> {
@@ -161,7 +161,7 @@ function App() {
   const currentPhase = useMemo(() => jobPhase(jobDraft), [jobDraft]);
 
   function ensureDraft(ticket: TicketSummary | TicketDetail): JobDraft {
-    if (jobDraft && jobDraft.ticketId === ticket.id) return jobDraft;
+    if (jobDraft?.ticketId === ticket.id) return jobDraft;
     const next = createDraft(ticket);
     setJobDraft(next);
     return next;
@@ -278,9 +278,9 @@ function App() {
 
     const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
+      reader.onerror = () => reject(reader.error ?? new Error("Failed to read photo"));
       reader.onload = () => {
-        const value = String(reader.result || "");
+        const value = typeof reader.result === "string" ? reader.result : "";
         resolve(value.split(",")[1] || "");
       };
       reader.readAsDataURL(file);
@@ -502,7 +502,7 @@ function App() {
               <h4>Manual time entry</h4>
               <div className="time-grid">
                 <label>
-                  Start
+                  <span>Start</span>
                   <input
                     id="te-start"
                     type="time"
@@ -511,7 +511,7 @@ function App() {
                   />
                 </label>
                 <label>
-                  End
+                  <span>End</span>
                   <input
                     id="te-end"
                     type="time"
@@ -521,7 +521,7 @@ function App() {
                 </label>
               </div>
               <label>
-                Work type
+                <span>Work type</span>
                 <select
                   value={timeForm.workType}
                   onChange={(event) =>
@@ -537,7 +537,7 @@ function App() {
                 </select>
               </label>
               <label>
-                Action type
+                <span>Action type</span>
                 <select
                   value={timeForm.actionTypeId}
                   onChange={(event) => setTimeForm((current) => ({ ...current, actionTypeId: event.target.value }))}
@@ -551,7 +551,7 @@ function App() {
                 </select>
               </label>
               <label>
-                Outcome
+                <span>Outcome</span>
                 <select
                   value={timeForm.outcomeId}
                   onChange={(event) => setTimeForm((current) => ({ ...current, outcomeId: event.target.value }))}
@@ -565,7 +565,7 @@ function App() {
                 </select>
               </label>
               <label>
-                Note
+                <span>Note</span>
                 <textarea
                   id="te-note"
                   rows={3}
@@ -633,7 +633,7 @@ function App() {
   );
 }
 
-function ToastRack({ toasts }: { toasts: Toast[] }) {
+function ToastRack({ toasts }: Readonly<{ toasts: readonly Toast[] }>) {
   return (
     <div className="toast-rack" aria-live="polite">
       {toasts.map((toast) => (
