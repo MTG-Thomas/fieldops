@@ -11,15 +11,15 @@ module.exports = defineConfig({
     ['html', { open: 'never', outputFolder: 'playwright-report' }],
   ],
   use: {
-    baseURL: 'http://localhost:5000',
+    baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npx serve . -l 5000 --no-clipboard',
-    url: 'http://localhost:5000',
+    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+    url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
   },
 });

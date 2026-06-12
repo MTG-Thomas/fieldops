@@ -2,84 +2,80 @@
 
 # FieldOps
 
-FieldOps is a lightweight, offline-capable Progressive Web App (PWA) that complements HaloPSA by giving field technicians a fast, focused UI for job check-ins, timers, time posting, photo capture, and ticket notes. It’s designed for service providers and MSPs that rely on mobile field work and want a friction-free companion to HaloPSA.
+FieldOps is now structured as an **Azure-native Progressive Web App** for HaloPSA:
 
-Marketplace listing (short):
+- **Azure Static Web Apps Free** hosts the frontend
+- **Microsoft Entra ID** authenticates technicians into FieldOps
+- **Azure Functions** acts as the backend-for-frontend (BFF)
+- **Halo OAuth** is completed once per user and stored server-side
+- **Azure Table Storage** and **Key Vault** hold the minimum secure state needed for the connection model
 
-> FieldOps — an offline-first companion PWA for HaloPSA. Quick time capture, photo attachments, and ticket updates for field technicians.
+The browser no longer stores Halo refresh tokens or talks directly to Halo APIs.
 
-Meta description (<=160 chars):
+## Repo shape
 
-FieldOps: offline-first companion PWA for HaloPSA. Fast time capture, photo attachments and ticket updates for field technicians.
+- [`src/`](/home/thomas/fieldops/src) React + TypeScript frontend
+- [`shared/contracts.ts`](/home/thomas/fieldops/shared/contracts.ts) shared app contracts
+- [`api/`](/home/thomas/fieldops/api) Azure Functions API
+- [`infra/main.bicep`](/home/thomas/fieldops/infra/main.bicep) low-cost Azure resource template
+- [`docs/option-2-viability.md`](/home/thomas/fieldops/docs/option-2-viability.md) bounded spike for evaluating Entra-to-Halo delegated API viability
 
-# FieldOps
+## Local development
 
-FieldOps is a lightweight, offline-capable Progressive Web App (PWA) that complements HaloPSA by giving field technicians a fast, focused UI for job check-ins, timers, time posting, photo capture, and ticket notes. It’s designed for service providers and MSPs that rely on mobile field work and want a friction-free companion to HaloPSA.
-
-Key benefits
-- Fast single-file PWA: deploy the static site and go — no build step required.
-- Time posting to HaloPSA Actions: posts Actions as arrays to /Actions with optional Outcome support.
-- Flexible Action Type handling: auto-discover when the server exposes endpoints or manually configure ActionType IDs.
-- Offline-friendly UX: local state and simple workflows for intermittent connectivity.
-- Minimal footprint: a single `index.html` contains UI, JS, and CSS for easy auditing and customization.
-
-Features
-- Ticket list and detail view with quick "Post to Halo" time entry
-- Job timer with travel/onsite phases and minimal duration guards
-- Photo capture with size guards for attachments
-- OAuth PKCE-based sign-in to HaloPSA
-- Settings UI to configure tenant, API URLs, agent ID, default Action Type/Outcome
-- Diagnostics and discovery helpers for Action Types and Outcomes
-
-Quick start (developer)
-1. Clone the repo:
+1. Install frontend dependencies:
    ```bash
-   git clone https://github.com/MTG-Thomas/fieldops.git
-   cd fieldops
+   npm install
    ```
-2. Serve locally (static server):
+2. Install API dependencies:
    ```bash
-   python3 -m http.server 8000
-   # then open http://localhost:8000/index.html
+   cd api && npm install
    ```
-   or use `npx serve`, `http-server`, etc.
-3. Deploy to Vercel (recommended):
+3. Copy [`api/local.settings.example.json`](/home/thomas/fieldops/api/local.settings.example.json) to `api/local.settings.json` and fill in real values if you want to hit Halo.
+4. Start the frontend:
    ```bash
-   npx vercel --prod
+   npm run dev
    ```
-   (Set `VERCEL_TOKEN` in your environment or use interactive login.)
+5. For local API work, run the Azure Functions host from `api/` with Azure Functions Core Tools. The frontend is already wired to call `/api/*` routes.
 
-Configuration (first run)
-- Open the app and fill Settings:
-  - Tenant (HaloPSA subdomain)
-  - Auth Server URL (e.g. `https://yourtenant.halopsa.com/auth`)
-  - Resource Server (API) URL (e.g. `https://yourtenant.halopsa.com/api`)
-  - Client ID (from your Halo OAuth app)
-  - Redirect URI (the app origin; must be registered in the OAuth app)
-  - Agent ID (your Halo agent id)
-  - Default Action Type ID (optional) and Default Outcome ID (optional)
-- Save & Connect → Sign in with HaloPSA
+If `FIELDOPS_USE_MOCK_DATA=true`, the Functions layer uses mock tickets and a mock connected user for low-friction local development.
 
-Notes on Action Types
-- HaloPSA installations vary. Some expose an ActionTypes listing endpoint; others do not or restrict it to privileged roles.
-- If discovery fails, use Settings → Load action types to attempt detection. The app stores discovery attempts and shows diagnostics to help admins.
-- If no listing endpoint is available, configure a Default Action Type manually in Settings or maintain a mapping.
+## Production deployment model
 
-Troubleshooting
-- "You do not have access to this Action": typically a permissions issue for the API agent or an invalid `actionType_id`. Check Settings → Load action types and diagnostics; ask your Halo admin to grant the API agent permission or provide a valid Action Type ID.
-- "An Outcome must be entered for this Action": configure Default Outcome in Settings or use the Outcomes picker (Settings → Load outcomes).
+### Static Web Apps
 
-Contributing
-- This is a single-file PWA (`index.html`). Keep changes focused and small. Run the app locally to test UI changes.
-- Open issues for feature requests or bugs. PRs are welcome; keep changes scoped and include testing steps.
+- Use [`staticwebapp.config.json`](/home/thomas/fieldops/staticwebapp.config.json) to require authenticated access and redirect anonymous users to `/.auth/login/aad`.
+- Start on **SWA Free**.
+- Upgrade to **SWA Standard** only if Free-tier auth/quotas/support become a blocker.
 
-Security and privacy
-- Do not commit secrets (client secrets, tokens). Use environment variables, Vercel secrets, or a password store (e.g., `pass`).
-- OAuth tokens are stored in `sessionStorage` for runtime; refresh tokens are handled by the app.
+### API
 
-License
-- See LICENSE
+The Functions layer exposes the v1 BFF routes:
 
-Contact / Demo
-- Live preview (latest): https://fieldops-delta.vercel.app
-- For enterprise usage or questions, open an issue or contact the maintainers.
+- `GET /api/session`
+- `POST /api/halo/connect/start`
+- `GET /api/halo/connect/callback`
+- `POST /api/halo/disconnect`
+- `GET /api/tickets`
+- `GET /api/tickets/{ticketId}`
+- `GET /api/action-types`
+- `GET /api/outcomes`
+- `POST /api/time-entries`
+- `POST /api/photos`
+- `POST /api/sync`
+
+## Security notes
+
+- Halo refresh tokens are encrypted before persistence.
+- The frontend stores only job drafts and offline retry work.
+- Photo uploads are streamed through the API and are not retained long-term in Azure.
+- Application Insights sampling is enabled in [`api/host.json`](/home/thomas/fieldops/api/host.json) to reduce telemetry spend.
+
+## Tests
+
+Run:
+
+```bash
+npm test
+```
+
+The Playwright suite validates the Azure-native UI flow with mocked `/api/*` responses and a Vite dev server.
